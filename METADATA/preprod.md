@@ -10,7 +10,7 @@
 ### TreasuryCheck parameter:
     groupInfoCurrency: ab10d11c554124c8217e2366d3532ebba47c0bc12141f92e12272ee3   
     groupInfoTokenName: 47726f7570496e666f546f6b656e436f696e
-    treasury: 
+    treasury: db32e243255f840792f922346c197c8e03f429c32fff30db18a627e9
 ### MappingToken parameter
     groupInfoNFTCurrency: ab10d11c554124c8217e2366d3532ebba47c0bc12141f92e12272ee3
     groupInfoNFTName: 47726f7570496e666f546f6b656e436f696e
