@@ -65,26 +65,27 @@ data GroupNFTHolderParam
 PlutusTx.unstableMakeIsData ''GroupNFTHolderParam
 PlutusTx.makeLift ''GroupNFTHolderParam
 
-data GroupInfoParams
-  = GroupInfoParams
-      { params :: [BuiltinByteString]
-      } deriving (Prelude.Eq, Prelude.Show)
+-- data GroupInfoParams
+--   = GroupInfoParams
+--       { params :: [BuiltinByteString]
+--       } deriving (Prelude.Eq, Prelude.Show)
 
-PlutusTx.unstableMakeIsData ''GroupInfoParams
+-- PlutusTx.unstableMakeIsData ''GroupInfoParams
 
-data ParamType = Version | Admin | GPK | BalanceWorker | TreasuryCheckVH | OracleWorker | MintCheckVH
-PlutusTx.unstableMakeIsData ''ParamType
+-- data ParamType = Version | Admin | GPK | BalanceWorker | TreasuryCheckVH | OracleWorker | MintCheckVH | StkPKh
+-- PlutusTx.unstableMakeIsData ''ParamType
 
-{-# INLINABLE getGroupInfoParams #-}
-getGroupInfoParams :: GroupInfoParams -> ParamType -> BuiltinByteString
-getGroupInfoParams (GroupInfoParams params) typeId = case typeId of
-    Version -> params !! 0
-    Admin -> params !! 1
-    GPK -> params !! 2
-    BalanceWorker -> params !! 3
-    TreasuryCheckVH -> params !! 4
-    OracleWorker -> params !! 5
-    MintCheckVH -> params !! 6
+-- {-# INLINABLE getGroupInfoParams #-}
+-- getGroupInfoParams :: GroupInfoParams -> ParamType -> BuiltinByteString
+-- getGroupInfoParams (GroupInfoParams params) typeId = case typeId of
+--     Version -> params !! 0
+--     Admin -> params !! 1
+--     GPK -> params !! 2
+--     BalanceWorker -> params !! 3
+--     TreasuryCheckVH -> params !! 4
+--     OracleWorker -> params !! 5
+--     MintCheckVH -> params !! 6
+--     StkPKh -> params !! 7
 
 data Holding
 instance Scripts.ValidatorTypes Holding where

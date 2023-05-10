@@ -27,16 +27,17 @@ module CrossChain.TreasuryCheck
   ,treasuryCheckScriptHash
   -- ,authorityCheckScriptHashStr
   ,treasuryCheckAddress
-  , TreasuryCheckRedeemer (..)
-  ,TreasuryCheckRedeemer
-  ,Storeman (..)
-  ,Storeman
+  , TreasuryCheckProof (..)
+  -- ,TreasuryCheckProof
+  , TreasuryCheckRedeemer(..)
+  ,TreasuryCheckrParams (..)
+  ,TreasuryCheckrParams
   ) where
 
 import Data.Aeson (FromJSON, ToJSON)
 import GHC.Generics (Generic)
 import Cardano.Api.Shelley (PlutusScript (..), PlutusScriptV2)
-import Prelude hiding (($),(<>), (&&), (&&), (==),(||),(>=),(<=),(<),(-),not,length,filter,(>),(!!),map,head,reverse,any,elem,snd,mconcat,negate,all)
+import Prelude hiding (($),(<>), (&&), (&&), (==),(||),(>=),(<=),(<),(-),(/=),not,length,filter,(>),(+),map,head,reverse,any,elem,snd,mconcat,negate,all)
 
 import Codec.Serialise
 import Data.ByteString.Lazy qualified as LBS
@@ -70,7 +71,7 @@ import Ledger.Value
 import Plutus.V2.Ledger.Contexts as V2
 import Ledger.Typed.Scripts qualified as Scripts hiding (validatorHash)
 import Plutus.V1.Ledger.Tx
-import CrossChain.Types
+import CrossChain.Types 
 -- ===================================================
 -- import Plutus.V1.Ledger.Value
 -- import Ledger.Address (PaymentPrivateKey (PaymentPrivateKey, unPaymentPrivateKey), PaymentPubKey (PaymentPubKey),PaymentPubKeyHash (..),unPaymentPubKeyHash,toPubKeyHash,toValidatorHash)
@@ -78,31 +79,33 @@ import CrossChain.Types
 import Ledger hiding (validatorHash) --singleton
 -- import Plutus.V1.Ledger.Scripts (getDatum)
 
-data GroupInfoParams
-  = GroupInfoParams
-      { params :: [BuiltinByteString]
-      } deriving (Prelude.Eq, Prelude.Show)
+-- data GroupInfoParams
+--   = GroupInfoParams
+--       { params :: [BuiltinByteString]
+--       } deriving (Prelude.Eq, Prelude.Show)
 
-PlutusTx.unstableMakeIsData ''GroupInfoParams
+-- PlutusTx.unstableMakeIsData ''GroupInfoParams
 
-data ParamType = Version | Admin | GPK | BalanceWorker | TreasuryCheckVH | OracleWorker | MintCheckVH
-PlutusTx.unstableMakeIsData ''ParamType
+-- data ParamType = Version | Admin | GPK | BalanceWorker | TreasuryCheckVH | OracleWorker | MintCheckVH | StkPKh
+-- PlutusTx.unstableMakeIsData ''ParamType
 
-{-# INLINABLE getGroupInfoParams #-}
-getGroupInfoParams :: GroupInfoParams -> ParamType -> BuiltinByteString
-getGroupInfoParams (GroupInfoParams params) typeId = case typeId of
-    Version -> params !! 0
-    Admin -> params !! 1
-    GPK -> params !! 2
-    BalanceWorker -> params !! 3
-    TreasuryCheckVH -> params !! 4
-    OracleWorker -> params !! 5
-    MintCheckVH -> params !! 6
+-- {-# INLINABLE getGroupInfoParams #-}
+-- getGroupInfoParams :: GroupInfoParams -> ParamType -> BuiltinByteString
+-- getGroupInfoParams (GroupInfoParams params) typeId = case typeId of
+--     Version -> params !! 0
+--     Admin -> params !! 1
+--     GPK -> params !! 2
+--     BalanceWorker -> params !! 3
+--     TreasuryCheckVH -> params !! 4
+--     OracleWorker -> params !! 5
+--     MintCheckVH -> params !! 6
+--     StkPKh -> params !! 7
 
 
-data TreasuryCheckRedeemer = TreasuryCheckRedeemer
+data TreasuryCheckProof = TreasuryCheckProof
   {
-    to :: BuiltinByteString -- send to 
+    toPkhPay :: BuiltinByteString -- send toPkh 
+    , toPkhStk :: BuiltinByteString
     , policy :: BuiltinByteString -- which token , zero indicated only transfer ada
     , assetName :: BuiltinByteString
     , amount :: Integer  -- token amount
@@ -112,152 +115,105 @@ data TreasuryCheckRedeemer = TreasuryCheckRedeemer
     , mode :: Integer
     , uniqueId :: BuiltinByteString
     , txType :: Integer
+    , ttl :: Integer
+    , outputCount :: Integer
     , signature :: BuiltinByteString
   }deriving (Prelude.Eq, Show)
 
 
-PlutusTx.unstableMakeIsData ''TreasuryCheckRedeemer
--- PlutusTx.makeLift ''TreasuryCheckRedeemer
+PlutusTx.unstableMakeIsData ''TreasuryCheckProof
+PlutusTx.makeLift ''TreasuryCheckProof
 
-data TreasuryNFTDatum = TreasuryNFTDatum
-  {
-    policy_id :: BuiltinByteString -- send to 
-    , tokenName :: BuiltinByteString -- which token , zero indicated only transfer ada
-  }deriving (Prelude.Eq, Show)
-PlutusTx.unstableMakeIsData ''TreasuryNFTDatum
+data TreasuryCheckRedeemer = BurnTreasuryCheckToken | TreasuryCheckRedeemer TreasuryCheckProof
+    deriving (Show, Prelude.Eq)
+PlutusTx.unstableMakeIsData ''TreasuryCheckRedeemer
 
 data TreasuryType
 instance Scripts.ValidatorTypes TreasuryType where
     type instance DatumType TreasuryType = ()
     type instance RedeemerType TreasuryType = TreasuryCheckRedeemer
 
-data Storeman
-  = Storeman
+data TreasuryCheckrParams
+  = TreasuryCheckrParams
       { groupInfoCurrency :: CurrencySymbol
         , groupInfoTokenName :: TokenName
         , treasury :: ValidatorHash 
-        -- , treasuryNFTCurrency :: CurrencySymbol
-        -- , treasuryNFTTokenName :: TokenName
+        , checkTokenSymbol :: CurrencySymbol
+        , checkTokenName :: TokenName
       } deriving stock (Generic)
         deriving anyclass (ToJSON, FromJSON)
 
-PlutusTx.unstableMakeIsData ''Storeman
-PlutusTx.makeLift ''Storeman
+PlutusTx.unstableMakeIsData ''TreasuryCheckrParams
+PlutusTx.makeLift ''TreasuryCheckrParams
 
 
-{-# INLINABLE packInteger #-}
--- | Pack an integer into a byte string with a leading
--- sign byte in little-endian order
-packInteger :: Integer -> BuiltinByteString
-packInteger k -- = if k < 0 then consByteString 1 (go (negate k) emptyByteString) else consByteString 0 (go k emptyByteString)
-  | k == 0 = consByteString 0 emptyByteString
-  | k < 0  = consByteString 0x80 (go (negate k) emptyByteString)
-  | otherwise = go k emptyByteString
-    where
-      go n s
-        | n == 0            = s
-        | otherwise         = go (n `PlutusTx.Prelude.divide` 256) (consByteString (n `modulo` 256) s)
-
-{-# INLINABLE findOwnInput' #-}
-findOwnInput' :: V2.ScriptContext -> Maybe V2.TxInInfo
-findOwnInput' V2.ScriptContext{V2.scriptContextTxInfo=V2.TxInfo{V2.txInfoInputs},
-             V2.scriptContextPurpose=Spending txOutRef} = go txInfoInputs
-    where
-        go [] = Nothing
-        go (i@V2.TxInInfo{V2.txInInfoOutRef} : rest) = if txInInfoOutRef == txOutRef
-                                                 then Just i
-                                                 else go rest
-findOwnInput' _ = Nothing
-
--- {-# INLINABLE ownAddress #-}
--- -- | Get the validator and datum hashes of the output that is curently being validated
--- ownAddress :: V2.ScriptContext -> Address
--- ownAddress (findOwnInput' -> Just V2.TxInInfo{V2.txInInfoResolved=V2.TxOut{V2.txOutAddress=addr}}) = addr
--- ownAddress _ = traceError "Lg" -- "Can't get validator and datum hashes"
-
-{-# INLINABLE scriptOutputsAt' #-}
-scriptOutputsAt' :: ValidatorHash -> V2.TxInfo -> [(Datum, Value)]
-scriptOutputsAt' h p =
-    let flt V2.TxOut{V2.txOutDatum=d, V2.txOutAddress=Address (Plutus.ScriptCredential s) _, V2.txOutValue} | s == h = case d of
-          Plutus.OutputDatum datum -> Just (datum, txOutValue)
-          _ -> Nothing
-        flt _ = Nothing
-    in mapMaybe flt (V2.txInfoOutputs p)
-
-{-# INLINABLE valueLockedBy' #-}
-valueLockedBy' :: V2.TxInfo -> ValidatorHash -> Value
-valueLockedBy' ptx h =
-    let outputs = map snd (scriptOutputsAt' h ptx)
-    in mconcat outputs
-
-{-# INLINABLE getContinuingOutputs' #-}
--- | Get all the outputs that pay to the same script address we are currently spending from, if any.
-getContinuingOutputs' :: V2.ScriptContext -> [V2.TxOut]
-getContinuingOutputs' ctx | Just V2.TxInInfo{V2.txInInfoResolved=V2.TxOut{V2.txOutAddress}} <- V2.findOwnInput ctx = filter (f txOutAddress) (V2.txInfoOutputs $ V2.scriptContextTxInfo ctx)
-    where
-        f addr V2.TxOut{V2.txOutDatum=d, V2.txOutAddress=otherAddress, V2.txOutValue} = case d of
-            OutputDatum datum -> addr == otherAddress
-            _ -> False
-getContinuingOutputs' _ = traceError "Lf" -- "Can't get any continuing outputs"
-
-{-# INLINABLE mkValidator #-}
-mkValidator :: Storeman ->() -> TreasuryCheckRedeemer -> V2.ScriptContext -> Bool
-mkValidator (Storeman groupInfoCurrency groupInfoTokenName treasury) _ (TreasuryCheckRedeemer to policy assetName amount adaAmount txHash index mode uniqueId txType signature) ctx = 
-  traceIfFalse "l" (V2.txSignedBy info  (PubKeyHash  (getGroupInfoParams groupInfo BalanceWorker))) && 
-  traceIfFalse "ht" (hasUTxO ctx) && 
-  traceIfFalse "hot" hasOwnOutput && 
-  traceIfFalse "at" isAuthorized && 
-  traceIfFalse "tt" checkTxInOut
-  where
-    
+{-# INLINABLE burnTokenCheck #-}
+burnTokenCheck :: TreasuryCheckrParams -> V2.ScriptContext -> Bool
+burnTokenCheck (TreasuryCheckrParams groupInfoCurrency groupInfoTokenName treasury  checkTokenSymbol checkTokenName) ctx = 
+  traceIfFalse "a" (V2.txSignedBy info  (PubKeyHash  (getGroupInfoParams groupInfo Admin))) 
+  && traceIfFalse "b" checkOutPut
+  && traceIfFalse "ti" (not hasTreasuryInput)
+  where 
     info :: V2.TxInfo
-    info = V2.scriptContextTxInfo ctx
+    !info = V2.scriptContextTxInfo ctx
 
-    isGroupInfoToken :: V2.TxOut -> Bool
-    isGroupInfoToken (V2.TxOut (Address credential _) txOutValue _ _) = (assetClassValueOf txOutValue ( assetClass groupInfoCurrency groupInfoTokenName)) > 0
+    groupInfo :: GroupInfoParams
+    !groupInfo = getGroupInfo info groupInfoCurrency groupInfoTokenName
 
-    refUtxosOfGroupInfo :: [V2.TxOut]
-    refUtxosOfGroupInfo = map (V2.txInInfoResolved) $ txInfoReferenceInputs info
 
-    getGroupInfoTokenFromReferenceInputs :: V2.TxOut
-    getGroupInfoTokenFromReferenceInputs = case filter (isGroupInfoToken) refUtxosOfGroupInfo of
-        [o] -> o
-        -- _ -> traceError "o"-- "expected exactly one groupInfotoken reference inputs"
+    checkOutPut :: Bool
+    !checkOutPut = 
+      let !totalAmountOfCheckTokenInOutput = getAmountOfCheckTokenInOutput ctx checkTokenSymbol checkTokenName
+          !outputsAtChecker = map snd $ scriptOutputsAt' (ValidatorHash (getGroupInfoParams groupInfo TreasuryCheckVH)) (getGroupInfoParams groupInfo StkPKh) info
+          !outputAtCheckerSum = valueOf (mconcat outputsAtChecker) checkTokenSymbol checkTokenName
+      in totalAmountOfCheckTokenInOutput == outputAtCheckerSum && (length outputsAtChecker) == outputAtCheckerSum
+
+
+    hasTreasuryInput :: Bool
+    !hasTreasuryInput = any (\V2.TxOut{V2.txOutAddress=Address (Plutus.ScriptCredential s) _} -> s == treasury) $ map V2.txInInfoResolved $ V2.txInfoInputs info
+
+{-# INLINABLE treasurySpendCheck #-}
+treasurySpendCheck :: TreasuryCheckrParams -> TreasuryCheckProof-> V2.ScriptContext -> Bool
+treasurySpendCheck (TreasuryCheckrParams groupInfoCurrency groupInfoTokenName treasury checkTokenSymbol checkTokenName ) (TreasuryCheckProof toPkhPay toPkhStk policy assetName amount adaAmount txHash index mode uniqueId txType ttl outputCount signature) ctx = 
+  -- traceIfFalse "l" (V2.txSignedBy info  (PubKeyHash  (getGroupInfoParams groupInfo BalanceWorker))) && 
+  traceIfFalse "ht" (hasUTxO ctx) && 
+  traceIfFalse "hot" (amountOfCheckTokeninOwnOutput == 1) && 
+  traceIfFalse "cs" checkSignature && 
+  traceIfFalse "tt" checkTxInOut  && -- check asset balance between input and output
+  traceIfFalse "notr" hasTreasuryInput && -- check has treasury input 
+  traceIfFalse "ttl" checkTtl
+  where 
+    info :: V2.TxInfo
+    !info = V2.scriptContextTxInfo ctx
 
     hashRedeemer :: BuiltinByteString
-    hashRedeemer = 
-        let !tmp1 = appendByteString (appendByteString (appendByteString (appendByteString to policy) assetName) (packInteger amount)) (packInteger adaAmount)
+    !hashRedeemer = 
+        let !tmp1 = appendByteString (appendByteString (appendByteString (appendByteString (appendByteString toPkhPay toPkhStk) policy) assetName) (packInteger amount)) (packInteger adaAmount)
             !tmp2 = appendByteString (appendByteString (appendByteString tmp1 txHash) (packInteger index)) (packInteger mode)
             !tmp3 = appendByteString tmp2 uniqueId
             !tmp4 = appendByteString tmp3 (packInteger txType)
-        in sha3_256 tmp4
+            !tmp5 = appendByteString tmp4 (packInteger ttl)
+            !tmp6 = appendByteString tmp5 (packInteger outputCount)
+        in sha3_256 tmp6
     
     hasUTxO :: V2.ScriptContext -> Bool
     hasUTxO V2.ScriptContext{V2.scriptContextPurpose=Spending txOutRef} = (V2.txOutRefId txOutRef) == (Plutus.TxId txHash) && (V2.txOutRefIdx txOutRef) == index
 
     verify :: Integer -> BuiltinByteString -> BuiltinByteString -> BuiltinByteString-> Bool
-    verify mode pk hash signature
+    verify mode pk hash signatureGroupInfoParams
       | mode == 0 = verifyEcdsaSecp256k1Signature pk hash signature
       | mode == 1 = verifySchnorrSecp256k1Signature pk hash signature
       | mode == 2 = verifyEd25519Signature pk hash signature
       -- | otherwise = traceError "m"
-
+    
     groupInfo :: GroupInfoParams
-    groupInfo = 
-      case getGroupInfoTokenFromReferenceInputs of
-        (V2.TxOut _ _ outputDatum _) -> case outputDatum of
-          (Plutus.OutputDatum datum ) -> case (Plutus.fromBuiltinData $ Plutus.getDatum datum) of
-            Just groupInfo -> groupInfo
+    !groupInfo = getGroupInfo info groupInfoCurrency groupInfoTokenName
 
-
-
-    hasOwnOutput :: Bool
-    hasOwnOutput = 
-      let !os = getContinuingOutputs' ctx
-      in length os > 0
+    amountOfCheckTokeninOwnOutput :: Integer
+    !amountOfCheckTokeninOwnOutput = getAmountOfCheckTokeninOwnOutput ctx checkTokenSymbol checkTokenName (getGroupInfoParams groupInfo StkPKh)
 
     checkSignature :: Bool
-    checkSignature = 
+    !checkSignature = 
       let !groupInfoPk = getGroupInfoParams groupInfo GPK
       in verify mode groupInfoPk hashRedeemer signature
 
@@ -267,44 +223,97 @@ mkValidator (Storeman groupInfoCurrency groupInfoTokenName treasury) _ (Treasury
         (Plutus.ScriptCredential s) -> s == treasury
         _ -> False
         
-    treasuryInputs:: [V2.TxInInfo]
-    treasuryInputs = filter (isTreasuryInput) (V2.txInfoInputs info)
-  
-    treasuryInputValue :: Value
-    treasuryInputValue  = mconcat $ map (\txIn -> V2.txOutValue $ V2.txInInfoResolved txIn) treasuryInputs
 
+    treasuryInputValue :: Value
+    !treasuryInputValue = go (Plutus.singleton Plutus.adaSymbol Plutus.adaToken 0) (V2.txInfoInputs info)
+      where
+        go v [] = v
+        go v (V2.TxInInfo{V2.txInInfoResolved=V2.TxOut{V2.txOutValue,V2.txOutAddress}} : rest) = case txOutAddress of
+          Address{addressCredential} -> case addressCredential of
+            Plutus.ScriptCredential s -> 
+              if s == treasury then 
+                if isValidValue txOutValue then go (v <> txOutValue) rest
+                else traceError "bi"
+              else go v rest
+            _ -> go v rest
+
+    hasTreasuryInput :: Bool
+    !hasTreasuryInput = ((valueOf treasuryInputValue Ada.adaSymbol Ada.adaToken) > 0)
+
+    targetSymbol :: CurrencySymbol 
+    !targetSymbol = CurrencySymbol policy
+    
+    targetTokenName :: TokenName
+    !targetTokenName = TokenName assetName
 
     valuePaidToTarget :: Value
-    valuePaidToTarget 
-      | txType == 1 = valueLockedBy' info treasury
-      | otherwise = V2.valuePaidTo info (PubKeyHash to)
+    !valuePaidToTarget 
+      | txType == 1 = valueLockedBy' info treasury (getGroupInfoParams groupInfo StkPKh)
+        -- let outValues = scriptOutputsAt' treasury (getGroupInfoParams groupInfo StkPKh) info
+        -- in 
+        --   if any (\v -> not $ isSingleAsset v targetSymbol targetTokenName) outValues then traceError "bo"
+        --   else mconcat outValues
+      | otherwise = valuePaidTo' info (PubKeyHash toPkhPay) toPkhStk
 
-    checkTx :: Bool -- 由groupInfo 承担gasFee (和 minAda,可选 adaValue确定)
-    checkTx = 
-        let !receivedValue = valuePaidToTarget -- V2.valuePaidTo info (PubKeyHash to)
+
+    isExpectedValue :: Value -> CurrencySymbol -> TokenName -> Bool
+    isExpectedValue v cs tk = 
+      if cs == Ada.adaSymbol && tk == Ada.adaToken then v == Plutus.singleton Plutus.adaSymbol Plutus.adaToken assetAmount
+      else (v == ((Plutus.singleton Plutus.adaSymbol Plutus.adaToken (valueOf v Ada.adaSymbol Ada.adaToken)) <> Plutus.singleton cs tk assetAmount)) 
+      && (assetAmount > 0)
+      where
+        assetAmount = valueOf v cs tk
+
+    -- isSingleAsset :: Value -> CurrencySymbol -> TokenName -> Bool
+    -- isSingleAsset v cs tk = not $ any (\(cs',tk',_) -> cs' /= cs && cs' /= Ada.adaSymbol && tk' /= tk && tk' /= Ada.adaToken) $ flattenValue v
+
+    isMultiAsset :: Value ->Bool
+    isMultiAsset v = (length $ flattenValue v) > 2
+
+    isValidValue :: Value -> Bool
+    isValidValue v
+      | txType == 2 = isMultiAsset v
+      | otherwise = isExpectedValue v targetSymbol targetTokenName
+
+    crossValue :: Value
+    !crossValue
+      | txType == 0 = Ada.lovelaceValueOf adaAmount <> Plutus.singleton targetSymbol targetTokenName amount
+      | otherwise = Ada.lovelaceValueOf 0
+
+
+    -- 1. 
+    checkTx :: Bool 
+    !checkTx = 
+        let !receivedValue = valuePaidToTarget -- V2.valuePaidTo info (PubKeyHash toPkhPay)
             !inputValue = treasuryInputValue
-            !crossValue =  Ada.lovelaceValueOf adaAmount <> Plutus.singleton (CurrencySymbol policy) (TokenName assetName) amount
-            !remainValue = valueLockedBy' info treasury
+            !changeValues = map snd $ scriptOutputsAt' treasury (getGroupInfoParams groupInfo StkPKh) info
+            !remainValue = mconcat changeValues
             !valueSum = crossValue <> remainValue
         in 
-          (receivedValue `geq` crossValue) && (valueSum `geq` inputValue)
-          -- && (all (\((Plutus.OutputDatum datum),_)-> True)) remainTxOuts
-    
-    -- CrossTx | BalanceTx | ManualTx
-    isAuthorized :: Bool
-    isAuthorized 
-      | txType == 1 = True
-      | otherwise =  checkSignature
-    
+          (receivedValue `geq` crossValue) && (valueSum `geq` inputValue) && (length changeValues == outputCount) 
+          && (isSingleAsset remainValue targetSymbol targetTokenName) 
+
     checkTxInOut:: Bool
-    checkTxInOut  
+    !checkTxInOut  
       | txType == 0 = checkTx
-      | txType == 1 = ((ValidatorHash to) == treasury) && checkTx
-      | txType == 2 = (V2.valuePaidTo info (PubKeyHash to)) `geq` treasuryInputValue
+      | txType == 1 = ((ValidatorHash toPkhPay) == treasury ) && (toPkhStk == (getGroupInfoParams groupInfo StkPKh)) && checkTx
+      | txType == 2 = (valuePaidTo' info (PubKeyHash toPkhPay) toPkhStk ) `geq` treasuryInputValue
+
+    checkTtl :: Bool
+    !checkTtl = 
+      let !range = V2.txInfoValidRange info
+          !ttlRange = to (Plutus.POSIXTime ttl)
+      in ttlRange == range 
+
+{-# INLINABLE mkValidator #-}
+mkValidator :: TreasuryCheckrParams ->() -> TreasuryCheckRedeemer -> V2.ScriptContext -> Bool
+mkValidator storeman _ redeemer ctx = 
+  case redeemer of
+    BurnTreasuryCheckToken -> burnTokenCheck storeman ctx
+    TreasuryCheckRedeemer treasuryRedeemer -> treasurySpendCheck storeman treasuryRedeemer ctx
 
 
-
-typedValidator :: Storeman -> PV2.TypedValidator TreasuryType
+typedValidator :: TreasuryCheckrParams -> PV2.TypedValidator TreasuryType
 typedValidator = PV2.mkTypedValidatorParam @TreasuryType
     $$(PlutusTx.compile [|| mkValidator ||])
     $$(PlutusTx.compile [|| wrap ||])
@@ -312,32 +321,32 @@ typedValidator = PV2.mkTypedValidatorParam @TreasuryType
         wrap = PV2.mkUntypedValidator
 
 
-validator :: Storeman -> Validator
+validator :: TreasuryCheckrParams -> Validator
 validator = PV2.validatorScript . typedValidator
 
-script :: Storeman -> Plutus.Script
+script :: TreasuryCheckrParams -> Plutus.Script
 script = unValidatorScript . validator
 
--- authorityCheckScriptShortBs :: Storeman -> SBS.ShortByteString
+-- authorityCheckScriptShortBs :: TreasuryCheckrParams -> SBS.ShortByteString
 -- authorityCheckScriptShortBs = SBS.toShort . LBS.toStrict $ serialise . script
 
 -- treasuryCheckScript :: CurrencySymbol -> PlutusScript PlutusScriptV2
 -- treasuryCheckScript = PlutusScriptSerialised . authorityCheckScriptShortBs
 
-treasuryCheckScript :: Storeman ->  PlutusScript PlutusScriptV2
+treasuryCheckScript :: TreasuryCheckrParams ->  PlutusScript PlutusScriptV2
 treasuryCheckScript p = PlutusScriptSerialised
   . SBS.toShort
   . LBS.toStrict
   $ serialise 
   (script p)
 
-treasuryCheckScriptHash :: Storeman -> Plutus.ValidatorHash
+treasuryCheckScriptHash :: TreasuryCheckrParams -> Plutus.ValidatorHash
 treasuryCheckScriptHash = PV2.validatorHash .typedValidator
 
--- authorityCheckScriptHashStr :: Storeman -> BuiltinByteString
+-- authorityCheckScriptHashStr :: TreasuryCheckrParams -> BuiltinByteString
 -- authorityCheckScriptHashStr = case PlutusTx.fromBuiltinData $ PlutusTx.toBuiltinData . treasuryCheckScriptHash of 
 --   Just s -> s
 --   Nothing -> ""
 
-treasuryCheckAddress ::Storeman -> Ledger.Address
+treasuryCheckAddress ::TreasuryCheckrParams -> Ledger.Address
 treasuryCheckAddress = PV2.validatorAddress . typedValidator
