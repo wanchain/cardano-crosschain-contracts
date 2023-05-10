@@ -73,33 +73,8 @@ import Ledger.Typed.Scripts qualified as Scripts hiding (validatorHash)
 import Plutus.V1.Ledger.Tx
 import CrossChain.Types 
 -- ===================================================
--- import Plutus.V1.Ledger.Value
--- import Ledger.Address (PaymentPrivateKey (PaymentPrivateKey, unPaymentPrivateKey), PaymentPubKey (PaymentPubKey),PaymentPubKeyHash (..),unPaymentPubKeyHash,toPubKeyHash,toValidatorHash)
 
 import Ledger hiding (validatorHash) --singleton
--- import Plutus.V1.Ledger.Scripts (getDatum)
-
--- data GroupInfoParams
---   = GroupInfoParams
---       { params :: [BuiltinByteString]
---       } deriving (Prelude.Eq, Prelude.Show)
-
--- PlutusTx.unstableMakeIsData ''GroupInfoParams
-
--- data ParamType = Version | Admin | GPK | BalanceWorker | TreasuryCheckVH | OracleWorker | MintCheckVH | StkPKh
--- PlutusTx.unstableMakeIsData ''ParamType
-
--- {-# INLINABLE getGroupInfoParams #-}
--- getGroupInfoParams :: GroupInfoParams -> ParamType -> BuiltinByteString
--- getGroupInfoParams (GroupInfoParams params) typeId = case typeId of
---     Version -> params !! 0
---     Admin -> params !! 1
---     GPK -> params !! 2
---     BalanceWorker -> params !! 3
---     TreasuryCheckVH -> params !! 4
---     OracleWorker -> params !! 5
---     MintCheckVH -> params !! 6
---     StkPKh -> params !! 7
 
 
 data TreasuryCheckProof = TreasuryCheckProof
@@ -175,7 +150,6 @@ burnTokenCheck (TreasuryCheckrParams groupInfoCurrency groupInfoTokenName treasu
 {-# INLINABLE treasurySpendCheck #-}
 treasurySpendCheck :: TreasuryCheckrParams -> TreasuryCheckProof-> V2.ScriptContext -> Bool
 treasurySpendCheck (TreasuryCheckrParams groupInfoCurrency groupInfoTokenName treasury checkTokenSymbol checkTokenName ) (TreasuryCheckProof toPkhPay toPkhStk policy assetName amount adaAmount txHash index mode uniqueId txType ttl outputCount signature) ctx = 
-  -- traceIfFalse "l" (V2.txSignedBy info  (PubKeyHash  (getGroupInfoParams groupInfo BalanceWorker))) && 
   traceIfFalse "ht" (hasUTxO ctx) && 
   traceIfFalse "hot" (amountOfCheckTokeninOwnOutput == 1) && 
   traceIfFalse "cs" checkSignature && 
@@ -249,10 +223,6 @@ treasurySpendCheck (TreasuryCheckrParams groupInfoCurrency groupInfoTokenName tr
     valuePaidToTarget :: Value
     !valuePaidToTarget 
       | txType == 1 = valueLockedBy' info treasury (getGroupInfoParams groupInfo StkPKh)
-        -- let outValues = scriptOutputsAt' treasury (getGroupInfoParams groupInfo StkPKh) info
-        -- in 
-        --   if any (\v -> not $ isSingleAsset v targetSymbol targetTokenName) outValues then traceError "bo"
-        --   else mconcat outValues
       | otherwise = valuePaidTo' info (PubKeyHash toPkhPay) toPkhStk
 
 
@@ -263,9 +233,6 @@ treasurySpendCheck (TreasuryCheckrParams groupInfoCurrency groupInfoTokenName tr
       && (assetAmount > 0)
       where
         assetAmount = valueOf v cs tk
-
-    -- isSingleAsset :: Value -> CurrencySymbol -> TokenName -> Bool
-    -- isSingleAsset v cs tk = not $ any (\(cs',tk',_) -> cs' /= cs && cs' /= Ada.adaSymbol && tk' /= tk && tk' /= Ada.adaToken) $ flattenValue v
 
     isMultiAsset :: Value ->Bool
     isMultiAsset v = (length $ flattenValue v) > 2
@@ -284,7 +251,7 @@ treasurySpendCheck (TreasuryCheckrParams groupInfoCurrency groupInfoTokenName tr
     -- 1. 
     checkTx :: Bool 
     !checkTx = 
-        let !receivedValue = valuePaidToTarget -- V2.valuePaidTo info (PubKeyHash toPkhPay)
+        let !receivedValue = valuePaidToTarget 
             !inputValue = treasuryInputValue
             !changeValues = map snd $ scriptOutputsAt' treasury (getGroupInfoParams groupInfo StkPKh) info
             !remainValue = mconcat changeValues
@@ -327,11 +294,7 @@ validator = PV2.validatorScript . typedValidator
 script :: TreasuryCheckrParams -> Plutus.Script
 script = unValidatorScript . validator
 
--- authorityCheckScriptShortBs :: TreasuryCheckrParams -> SBS.ShortByteString
--- authorityCheckScriptShortBs = SBS.toShort . LBS.toStrict $ serialise . script
 
--- treasuryCheckScript :: CurrencySymbol -> PlutusScript PlutusScriptV2
--- treasuryCheckScript = PlutusScriptSerialised . authorityCheckScriptShortBs
 
 treasuryCheckScript :: TreasuryCheckrParams ->  PlutusScript PlutusScriptV2
 treasuryCheckScript p = PlutusScriptSerialised
@@ -343,10 +306,6 @@ treasuryCheckScript p = PlutusScriptSerialised
 treasuryCheckScriptHash :: TreasuryCheckrParams -> Plutus.ValidatorHash
 treasuryCheckScriptHash = PV2.validatorHash .typedValidator
 
--- authorityCheckScriptHashStr :: TreasuryCheckrParams -> BuiltinByteString
--- authorityCheckScriptHashStr = case PlutusTx.fromBuiltinData $ PlutusTx.toBuiltinData . treasuryCheckScriptHash of 
---   Just s -> s
---   Nothing -> ""
 
 treasuryCheckAddress ::TreasuryCheckrParams -> Ledger.Address
 treasuryCheckAddress = PV2.validatorAddress . typedValidator

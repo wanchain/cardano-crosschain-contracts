@@ -81,68 +81,10 @@ import Ledger hiding (validatorHash) --singleton
 import CrossChain.Types 
 
 
--- data CheckTokenInfoParam
---   = CheckTokenInfoParam
---       { 
---         -- groupInfoNFTCurrency :: CurrencySymbol
---         -- , groupInfoNFTName :: TokenName
---         checkTokenSymbol :: CurrencySymbol
---         , checkTokenName :: TokenName
---       } deriving stock (Generic)
---         deriving anyclass (ToJSON, FromJSON)
-
--- PlutusTx.unstableMakeIsData ''CheckTokenInfoParam
--- PlutusTx.makeLift ''CheckTokenInfoParam
-
--- data GroupInfoParams
---   = GroupInfoParams
---       { params :: [BuiltinByteString]
---       } deriving (Prelude.Eq, Prelude.Show)
-
--- PlutusTx.unstableMakeIsData ''GroupInfoParams
-
--- data ParamType = Version | Admin | GPK | BalanceWorker | TreasuryCheckVH | OracleWorker | MintCheckVH | StkPKh
--- PlutusTx.unstableMakeIsData ''ParamType
-
--- {-# INLINABLE getGroupInfoParams #-}
--- getGroupInfoParams :: GroupInfoParams -> ParamType -> BuiltinByteString
--- getGroupInfoParams (GroupInfoParams params) typeId = case typeId of
---     Version -> params !! 0
---     Admin -> params !! 1
---     GPK -> params !! 2
---     BalanceWorker -> params !! 3
---     TreasuryCheckVH -> params !! 4
---     OracleWorker -> params !! 5
---     MintCheckVH -> params !! 6
---     StkPKh -> params !! 7
-    
--- data TreasuryType
--- instance Scripts.ValidatorTypes TreasuryType where
---     type instance DatumType TreasuryType = ()
---     type instance RedeemerType TreasuryType = ()
-
--- {-# INLINABLE groupInfoFromUtxo #-}
--- groupInfoFromUtxo :: TxOut' -> GroupInfoParams
--- groupInfoFromUtxo TxOut'{txOutDatum'=Plutus.OutputDatum datum} = case (Plutus.fromBuiltinData $ Plutus.getDatum datum) of
---   Just groupInfo -> groupInfo
-
-
--- findOwnInput' :: V2.ScriptContext -> Maybe V2.TxInInfo
--- findOwnInput' V2.ScriptContext{V2.scriptContextTxInfo=V2.TxInfo{V2.txInfoInputs},
---              V2.scriptContextPurpose=Spending txOutRef} = go txInfoInputs
---     where
---         go [] = Nothing
---         go (i@V2.TxInInfo{V2.txInInfoOutRef} : rest) = if txInInfoOutRef == txOutRef
---                                                  then Just i
---                                                  else go rest
--- findOwnInput' _ = Nothing
-
 {-# INLINABLE mkValidator #-} -- V2.ScriptContext
 mkValidator :: CheckTokenInfoParam -> () -> () -> BuiltinData -> Bool
 mkValidator (CheckTokenInfoParam checkTokenSymbol checkTokenName) _ _ rawContext = -- True
   traceIfFalse "hat" hasTreasuryTokenInput
-  -- && traceIfFalse "dd" hasGroupInfoTokenFromReferenceInputs
-  -- test
   where
     ctx :: StoremanScriptContext
     !ctx = PlutusTx.unsafeFromBuiltinData @StoremanScriptContext rawContext
@@ -162,18 +104,10 @@ mkValidator (CheckTokenInfoParam checkTokenSymbol checkTokenName) _ _ rawContext
 
     hasTreasuryTokenInput :: Bool
     !hasTreasuryTokenInput = 
-      let !totalInputValue = totalValue -- foldMap (txOutValue' . txInInfoResolved') txInputs
+      let !totalInputValue = totalValue 
           !amount = valueOf totalInputValue checkTokenSymbol checkTokenName
       in amount == 1
 
-
-
--- typedValidator :: CheckTokenInfoParam -> PV2.TypedValidator TreasuryType
--- typedValidator = PV2.mkTypedValidatorParam @TreasuryType
---     $$(PlutusTx.compile [|| mkValidator ||])
---     $$(PlutusTx.compile [|| wrap ||])
---     where
---         wrap = PV2.mkUntypedValidator
 
 validator :: CheckTokenInfoParam -> Scripts.Validator
 validator p = Plutus.mkValidatorScript $
@@ -183,17 +117,10 @@ validator p = Plutus.mkValidatorScript $
     where validatorParam s = mkUntypedValidator' (mkValidator s)
 
 
--- validator :: CheckTokenInfoParam -> Validator
--- validator = PV2.validatorScript . typedValidator
 
 script :: CheckTokenInfoParam -> Plutus.Script
 script = Plutus.unValidatorScript . validator
 
--- treasuryScriptShortBs :: CheckTokenInfoParam -> SBS.ShortByteString
--- treasuryScriptShortBs = SBS.toShort . LBS.toStrict $ serialise . script
-
--- treasuryScript :: CheckTokenInfoParam -> PlutusScript PlutusScriptV2
--- treasuryScript = PlutusScriptSerialised . treasuryScriptShortBs
 
 treasuryScript :: CheckTokenInfoParam ->  PlutusScript PlutusScriptV2
 treasuryScript p = PlutusScriptSerialised
@@ -204,11 +131,6 @@ treasuryScript p = PlutusScriptSerialised
 
 treasuryScriptHash :: CheckTokenInfoParam -> Plutus.ValidatorHash
 treasuryScriptHash = Scripts.validatorHash . validator
-
--- treasuryScriptHashStr :: CheckTokenInfoParam -> BuiltinByteString
--- treasuryScriptHashStr = case PlutusTx.fromBuiltinData $ PlutusTx.toBuiltinData . treasuryScriptHash of 
---   Just s -> s
---   Nothing -> ""
 
 treasuryAddress ::CheckTokenInfoParam -> Ledger.Address
 treasuryAddress = mkValidatorAddress . validator

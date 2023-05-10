@@ -69,8 +69,7 @@ mkPolicy :: CheckTokenParam -> () -> ScriptContext -> Bool
 mkPolicy (CheckTokenParam groupInfoNFTCurrency groupInfoNFTName checkTokenName groupInfoIndex) () ctx = 
   traceIfFalse "wa" checkMint
   && traceIfFalse "s" (V2.txSignedBy info  (PubKeyHash  (getGroupInfoParams groupInfo Admin)))
-  -- && traceIfFalse "eo" checkOutput
-  -- && traceIfFalse "m" checkOutputCount
+
   where
     info :: TxInfo
     info = scriptContextTxInfo ctx

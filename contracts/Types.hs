@@ -46,13 +46,6 @@ import Plutus.Script.Utils.Typed (UntypedValidator)
 import Plutus.V2.Ledger.Contexts as V2
 import Plutus.V1.Ledger.Value (valueOf,currencySymbol,tokenName,symbols,flattenValue,assetClass,assetClassValueOf)
 import Ledger.Ada  as Ada
--- {-# INLINABLE groupInfoNFTCurrency #-}
--- groupInfoNFTCurrency :: CurrencySymbol
--- groupInfoNFTCurrency = groupNFTSymbol nftNonce
-
--- {-# INLINABLE groupInfoNFTName #-}
--- groupInfoNFTName :: TokenName
--- groupInfoNFTName = TokenName (encodeUtf8 "GroupInfoTokenCoin")
 
 
 
@@ -145,22 +138,6 @@ PlutusTx.makeIsDataIndexed ''ParamType [('Version, 0),('Admin, 1),('GPK, 2),('Ba
 PlutusTx.makeLift ''GroupInfoParams
 PlutusTx.makeIsDataIndexed ''GroupInfoParams [('GroupInfoParams, 0)]
 
--- PlutusTx.makeLift ''TreasuryCheckProof
--- PlutusTx.makeIsDataIndexed ''TreasuryCheckProof [('TreasuryCheckProof, 0)]
-
--- PlutusTx.makeLift ''MintCheckRedeemer
--- PlutusTx.makeIsDataIndexed ''MintCheckRedeemer [('MintCheckRedeemer, 0)]
-
--- PlutusTx.makeLift ''CheckRedeemer
--- PlutusTx.makeIsDataIndexed ''CheckRedeemer [('BurnCheckToken, 0),('TreasuryCheckProof, 1),('MintCheckRedeemer, 2)]
--- PlutusTx.makeLift ''ScriptPurpose
--- PlutusTx.makeIsDataIndexed
---   ''ScriptPurpose
---   [ ('Minting, 0),
---     ('Spending, 1),
---     ('Rewarding, 2),
---     ('Certifying, 3)
---   ]
 
 {-# INLINABLE getGroupInfoParams #-}
 getGroupInfoParams :: GroupInfoParams -> ParamType -> BuiltinByteString

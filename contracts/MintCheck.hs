@@ -72,34 +72,8 @@ import Ledger.Typed.Scripts qualified as Scripts hiding (validatorHash)
 import Plutus.V1.Ledger.Tx
 import CrossChain.Types
 -- ===================================================
--- import Plutus.V1.Ledger.Value
--- import Ledger.Address (PaymentPrivateKey (PaymentPrivateKey, unPaymentPrivateKey), PaymentPubKey (PaymentPubKey),PaymentPubKeyHash (..),unPaymentPubKeyHash,toPubKeyHash,toValidatorHash)
 
-import Ledger hiding (validatorHash) --singleton
--- import Plutus.V1.Ledger.Scripts (getDatum)
-
--- data GroupInfoParams
---   = GroupInfoParams
---       { params :: [BuiltinByteString]
---       } deriving (Prelude.Eq, Prelude.Show)
-
--- PlutusTx.unstableMakeIsData ''GroupInfoParams
-
--- data ParamType = Version | Admin | GPK | BalanceWorker | TreasuryCheckVH | OracleWorker | MintCheckVH | StkPKh
--- PlutusTx.unstableMakeIsData ''ParamType
-
--- {-# INLINABLE getGroupInfoParams #-}
--- getGroupInfoParams :: GroupInfoParams -> ParamType -> BuiltinByteString
--- getGroupInfoParams (GroupInfoParams params) typeId = case typeId of
---     Version -> params !! 0
---     Admin -> params !! 1
---     GPK -> params !! 2
---     BalanceWorker -> params !! 3
---     TreasuryCheckVH -> params !! 4
---     OracleWorker -> params !! 5
---     MintCheckVH -> params !! 6
---     StkPKh -> params !! 7
-
+import Ledger hiding (validatorHash) 
 
 data MintCheckProof = MintCheckProof
   {
@@ -108,12 +82,10 @@ data MintCheckProof = MintCheckProof
     , policy :: BuiltinByteString -- which token , zero indicated only transfer ada
     , assetName :: BuiltinByteString
     , amount :: Integer  -- token amount
-    -- , adaAmount :: Integer -- addtional ada amount
     , txHash :: BuiltinByteString
     , index :: Integer
     , mode :: Integer
     , uniqueId :: BuiltinByteString
-    -- , txType :: Integer
     , ttl :: Integer
     , signature :: BuiltinByteString
   }deriving (Prelude.Eq, Show)
@@ -168,7 +140,6 @@ burnTokenCheck (MintCheckParams groupInfoCurrency groupInfoTokenName  checkToken
 {-# INLINABLE mintSpendCheck #-}
 mintSpendCheck :: MintCheckParams -> MintCheckProof -> V2.ScriptContext -> Bool
 mintSpendCheck (MintCheckParams groupInfoCurrency groupInfoTokenName checkTokenSymbol checkTokenName) (MintCheckProof toPkhPay toPkhStk policy assetName amount txHash index mode uniqueId ttl signature) ctx = 
-  -- traceIfFalse "l" (V2.txSignedBy info  (PubKeyHash  (getGroupInfoParams groupInfo BalanceWorker))) && 
   traceIfFalse "hm" (hasUTxO ctx) && 
   traceIfFalse "hm" (amountOfCheckTokeninOwnOutput == 1) && 
   traceIfFalse "am" checkSignature &&  
@@ -272,11 +243,6 @@ validator = PV2.validatorScript . typedValidator
 script :: MintCheckParams -> Plutus.Script
 script = unValidatorScript . validator
 
--- authorityCheckScriptShortBs :: MintCheckParams -> SBS.ShortByteString
--- authorityCheckScriptShortBs = SBS.toShort . LBS.toStrict $ serialise . script
-
--- mintCheckScript :: CurrencySymbol -> PlutusScript PlutusScriptV2
--- mintCheckScript = PlutusScriptSerialised . authorityCheckScriptShortBs
 
 mintCheckScript :: MintCheckParams ->  PlutusScript PlutusScriptV2
 mintCheckScript p = PlutusScriptSerialised

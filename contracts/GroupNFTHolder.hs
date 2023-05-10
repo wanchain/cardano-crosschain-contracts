@@ -46,14 +46,6 @@ import Plutus.V1.Ledger.Scripts (unValidatorScript)
 import Ledger.Typed.Scripts qualified as Scripts hiding (validatorHash)
 import CrossChain.Types
 
--- data GroupInfoParams
---   = GroupInfoParams
---       { groupInfoPk       :: BuiltinByteString
---         , adminPKH :: BuiltinByteString
---         -- , groupInfoTokenHolder :: V2.ValidatorHash
---       } deriving (Prelude.Eq, Show)
-
--- PlutusTx.unstableMakeIsData ''GroupInfoParams
 
 data GroupNFTHolderParam
   = GroupNFTHolderParam
@@ -64,28 +56,6 @@ data GroupNFTHolderParam
 
 PlutusTx.unstableMakeIsData ''GroupNFTHolderParam
 PlutusTx.makeLift ''GroupNFTHolderParam
-
--- data GroupInfoParams
---   = GroupInfoParams
---       { params :: [BuiltinByteString]
---       } deriving (Prelude.Eq, Prelude.Show)
-
--- PlutusTx.unstableMakeIsData ''GroupInfoParams
-
--- data ParamType = Version | Admin | GPK | BalanceWorker | TreasuryCheckVH | OracleWorker | MintCheckVH | StkPKh
--- PlutusTx.unstableMakeIsData ''ParamType
-
--- {-# INLINABLE getGroupInfoParams #-}
--- getGroupInfoParams :: GroupInfoParams -> ParamType -> BuiltinByteString
--- getGroupInfoParams (GroupInfoParams params) typeId = case typeId of
---     Version -> params !! 0
---     Admin -> params !! 1
---     GPK -> params !! 2
---     BalanceWorker -> params !! 3
---     TreasuryCheckVH -> params !! 4
---     OracleWorker -> params !! 5
---     MintCheckVH -> params !! 6
---     StkPKh -> params !! 7
 
 data Holding
 instance Scripts.ValidatorTypes Holding where
@@ -175,8 +145,6 @@ mkValidator (GroupNFTHolderParam currency tName) _ action ctx = traceIfFalse "si
       let 
         !oldParams = params $ groupInfoParams ownInput
         !newParams = params $ groupInfoParams ownOutput
-        -- !flags =  map (\p -> if elem p newParams then 1 else 0 ) oldParams 
-        -- !cnt = sum flags
       in paramsDiff oldParams newParams action
       
 
@@ -198,7 +166,6 @@ groupInfoTokenHolderScriptShortBs :: GroupNFTHolderParam -> SBS.ShortByteString
 groupInfoTokenHolderScriptShortBs c = SBS.toShort . LBS.toStrict $ serialise  (script c)
 
 groupNFTHolderScript :: GroupNFTHolderParam ->  PlutusScript PlutusScriptV2
--- groupNFTHolderScript = PlutusScriptSerialised . groupInfoTokenHolderScriptShortBs
 groupNFTHolderScript c = PlutusScriptSerialised
   . SBS.toShort
   . LBS.toStrict
