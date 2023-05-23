@@ -14,7 +14,7 @@ module CrossChain.GroupNFTHolder
   ,groupNFTHolderScriptHash
   ,groupNFTHolderAddress
   , GroupInfoParams (..)
-  ,GroupNFTHolderParam (..)
+  -- ,GroupAdminNFTInfo (..)
   ,ParamType (..)
   ) where
 
@@ -47,15 +47,6 @@ import Ledger.Typed.Scripts qualified as Scripts hiding (validatorHash)
 import CrossChain.Types
 
 
-data GroupNFTHolderParam
-  = GroupNFTHolderParam
-      { currency       :: CurrencySymbol
-        , tName :: TokenName
-        -- , groupInfoTokenHolder :: V2.ValidatorHash
-      } deriving (Prelude.Eq, Show)
-
-PlutusTx.unstableMakeIsData ''GroupNFTHolderParam
-PlutusTx.makeLift ''GroupNFTHolderParam
 
 data Holding
 instance Scripts.ValidatorTypes Holding where
@@ -64,8 +55,8 @@ instance Scripts.ValidatorTypes Holding where
 
 -- switch gpk & update admin TODO 
 {-# INLINABLE mkValidator #-}
-mkValidator :: GroupNFTHolderParam -> () -> Integer -> V2.ScriptContext -> Bool
-mkValidator (GroupNFTHolderParam currency tName) _ action ctx = traceIfFalse "signature check failed" isAuthorized
+mkValidator :: GroupAdminNFTInfo -> () -> Integer -> V2.ScriptContext -> Bool
+mkValidator (GroupAdminNFTInfo (GroupNFTTokenInfo groupNftSymbol groupNftName) (AdminNftTokenInfo adminNftSymbol adminNftName)) _ action ctx = traceIfFalse "noauth" isAuthorized
   && traceIfFalse "gmi"  inputHasToken  
   && traceIfFalse "gmo"   outputHasToken --(outputHasToken && isRigthOWner) -- || (checkMintedOrBurnAmount $ negate 1))
   && traceIfFalse "wdat" checkNewDatum
@@ -75,13 +66,18 @@ mkValidator (GroupNFTHolderParam currency tName) _ action ctx = traceIfFalse "si
 
     txInfoInputs :: [V2.TxInInfo]
     txInfoInputs = V2.txInfoInputs info
+    
+    hasAdminNftInInput :: Bool
+    !hasAdminNftInInput = 
+      let !totalInputValue = V2.valueSpent info
+          !amount = valueOf totalInputValue adminNftSymbol adminNftName
+      in amount == 1
 
     --only admin has permission
     isAuthorized :: Bool
     isAuthorized = 
-      let !adminPKH = getGroupInfoParams (groupInfoParams ownInput) Admin
-          !oracleWorkerPKH = getGroupInfoParams (groupInfoParams ownInput) OracleWorker
-      in (V2.txSignedBy info  (PubKeyHash adminPKH)) || ((action == 2) && (V2.txSignedBy info  (PubKeyHash oracleWorkerPKH)))
+      let !oracleWorkerPKH = getGroupInfoParams (groupInfoParams ownInput) OracleWorker
+      in (hasAdminNftInInput) || ((action == 2) && (V2.txSignedBy info  (PubKeyHash oracleWorkerPKH)))
     
     ownInput :: V2.TxOut
     ownInput = case V2.findOwnInput ctx of
@@ -89,7 +85,7 @@ mkValidator (GroupNFTHolderParam currency tName) _ action ctx = traceIfFalse "si
         Just i  -> V2.txInInfoResolved i
 
     groupTokenValue :: V2.TxOut -> Integer
-    groupTokenValue o = assetClassValueOf (V2.txOutValue o) (assetClass currency tName)
+    groupTokenValue o = assetClassValueOf (V2.txOutValue o) (assetClass groupNftSymbol groupNftName)
 
     inputHasToken :: Bool
     inputHasToken =  (groupTokenValue ownInput) > 0
@@ -145,27 +141,30 @@ mkValidator (GroupNFTHolderParam currency tName) _ action ctx = traceIfFalse "si
       let 
         !oldParams = params $ groupInfoParams ownInput
         !newParams = params $ groupInfoParams ownOutput
+        -- !flags =  map (\p -> if elem p newParams then 1 else 0 ) oldParams 
+        -- !cnt = sum flags
       in paramsDiff oldParams newParams action
       
 
 
-typedValidator :: GroupNFTHolderParam -> PV2.TypedValidator Holding
+typedValidator :: GroupAdminNFTInfo -> PV2.TypedValidator Holding
 typedValidator = PV2.mkTypedValidatorParam @Holding
     $$(PlutusTx.compile [|| mkValidator ||])
     $$(PlutusTx.compile [|| wrap ||])
     where
         wrap = PV2.mkUntypedValidator
 
-validator :: GroupNFTHolderParam -> Validator
+validator :: GroupAdminNFTInfo -> Validator
 validator = PV2.validatorScript . typedValidator
 
-script :: GroupNFTHolderParam -> Plutus.Script
+script :: GroupAdminNFTInfo -> Plutus.Script
 script = unValidatorScript . validator
 
-groupInfoTokenHolderScriptShortBs :: GroupNFTHolderParam -> SBS.ShortByteString
+groupInfoTokenHolderScriptShortBs :: GroupAdminNFTInfo -> SBS.ShortByteString
 groupInfoTokenHolderScriptShortBs c = SBS.toShort . LBS.toStrict $ serialise  (script c)
 
-groupNFTHolderScript :: GroupNFTHolderParam ->  PlutusScript PlutusScriptV2
+groupNFTHolderScript :: GroupAdminNFTInfo ->  PlutusScript PlutusScriptV2
+-- groupNFTHolderScript = PlutusScriptSerialised . groupInfoTokenHolderScriptShortBs
 groupNFTHolderScript c = PlutusScriptSerialised
   . SBS.toShort
   . LBS.toStrict
@@ -173,8 +172,8 @@ groupNFTHolderScript c = PlutusScriptSerialised
   (script c)
 
 
-groupNFTHolderAddress :: GroupNFTHolderParam -> Ledger.Address
+groupNFTHolderAddress :: GroupAdminNFTInfo -> Ledger.Address
 groupNFTHolderAddress = PV2.validatorAddress . typedValidator
 
-groupNFTHolderScriptHash :: GroupNFTHolderParam -> ValidatorHash
+groupNFTHolderScriptHash :: GroupAdminNFTInfo -> ValidatorHash
 groupNFTHolderScriptHash = PV2.validatorHash .typedValidator

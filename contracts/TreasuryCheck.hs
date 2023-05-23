@@ -30,8 +30,8 @@ module CrossChain.TreasuryCheck
   , TreasuryCheckProof (..)
   -- ,TreasuryCheckProof
   , TreasuryCheckRedeemer(..)
-  ,TreasuryCheckrParams (..)
-  ,TreasuryCheckrParams
+  ,TreasuryCheckParams (..)
+  ,TreasuryCheckParams
   ) where
 
 import Data.Aeson (FromJSON, ToJSON)
@@ -73,8 +73,12 @@ import Ledger.Typed.Scripts qualified as Scripts hiding (validatorHash)
 import Plutus.V1.Ledger.Tx
 import CrossChain.Types 
 -- ===================================================
+-- import Plutus.V1.Ledger.Value
+-- import Ledger.Address (PaymentPrivateKey (PaymentPrivateKey, unPaymentPrivateKey), PaymentPubKey (PaymentPubKey),PaymentPubKeyHash (..),unPaymentPubKeyHash,toPubKeyHash,toValidatorHash)
 
 import Ledger hiding (validatorHash) --singleton
+
+
 
 
 data TreasuryCheckProof = TreasuryCheckProof
@@ -108,24 +112,21 @@ instance Scripts.ValidatorTypes TreasuryType where
     type instance DatumType TreasuryType = ()
     type instance RedeemerType TreasuryType = TreasuryCheckRedeemer
 
-data TreasuryCheckrParams
-  = TreasuryCheckrParams
-      { groupInfoCurrency :: CurrencySymbol
-        , groupInfoTokenName :: TokenName
+data TreasuryCheckParams
+  = TreasuryCheckParams
+      { tokenInfos :: GroupAdminNFTCheckTokenInfo
         , treasury :: ValidatorHash 
-        , checkTokenSymbol :: CurrencySymbol
-        , checkTokenName :: TokenName
-      } deriving stock (Generic)
-        deriving anyclass (ToJSON, FromJSON)
+      } deriving (Generic, Prelude.Eq)
+        -- deriving anyclass (ToJSON, FromJSON)
 
-PlutusTx.unstableMakeIsData ''TreasuryCheckrParams
-PlutusTx.makeLift ''TreasuryCheckrParams
+PlutusTx.unstableMakeIsData ''TreasuryCheckParams
+PlutusTx.makeLift ''TreasuryCheckParams
 
 
 {-# INLINABLE burnTokenCheck #-}
-burnTokenCheck :: TreasuryCheckrParams -> V2.ScriptContext -> Bool
-burnTokenCheck (TreasuryCheckrParams groupInfoCurrency groupInfoTokenName treasury  checkTokenSymbol checkTokenName) ctx = 
-  traceIfFalse "a" (V2.txSignedBy info  (PubKeyHash  (getGroupInfoParams groupInfo Admin))) 
+burnTokenCheck :: TreasuryCheckParams -> V2.ScriptContext -> Bool
+burnTokenCheck (TreasuryCheckParams (GroupAdminNFTCheckTokenInfo (GroupNFTTokenInfo groupInfoCurrency groupInfoTokenName) (AdminNftTokenInfo adminNftSymbol adminNftName) (CheckTokenInfo checkTokenSymbol checkTokenName)) treasury) ctx = 
+  traceIfFalse "a" hasAdminNftInInput 
   && traceIfFalse "b" checkOutPut
   && traceIfFalse "ti" (not hasTreasuryInput)
   where 
@@ -135,11 +136,16 @@ burnTokenCheck (TreasuryCheckrParams groupInfoCurrency groupInfoTokenName treasu
     groupInfo :: GroupInfoParams
     !groupInfo = getGroupInfo info groupInfoCurrency groupInfoTokenName
 
+    hasAdminNftInInput :: Bool
+    !hasAdminNftInInput = 
+      let !totalInputValue = V2.valueSpent info
+          !amount = valueOf totalInputValue adminNftSymbol adminNftName
+      in amount == 1
 
     checkOutPut :: Bool
     !checkOutPut = 
       let !totalAmountOfCheckTokenInOutput = getAmountOfCheckTokenInOutput ctx checkTokenSymbol checkTokenName
-          !outputsAtChecker = map snd $ scriptOutputsAt' (ValidatorHash (getGroupInfoParams groupInfo TreasuryCheckVH)) (getGroupInfoParams groupInfo StkPKh) info
+          !outputsAtChecker = map snd $ scriptOutputsAt' (ValidatorHash (getGroupInfoParams groupInfo TreasuryCheckVH)) (getGroupInfoParams groupInfo StkVh) info
           !outputAtCheckerSum = valueOf (mconcat outputsAtChecker) checkTokenSymbol checkTokenName
       in totalAmountOfCheckTokenInOutput == outputAtCheckerSum && (length outputsAtChecker) == outputAtCheckerSum
 
@@ -148,8 +154,9 @@ burnTokenCheck (TreasuryCheckrParams groupInfoCurrency groupInfoTokenName treasu
     !hasTreasuryInput = any (\V2.TxOut{V2.txOutAddress=Address (Plutus.ScriptCredential s) _} -> s == treasury) $ map V2.txInInfoResolved $ V2.txInfoInputs info
 
 {-# INLINABLE treasurySpendCheck #-}
-treasurySpendCheck :: TreasuryCheckrParams -> TreasuryCheckProof-> V2.ScriptContext -> Bool
-treasurySpendCheck (TreasuryCheckrParams groupInfoCurrency groupInfoTokenName treasury checkTokenSymbol checkTokenName ) (TreasuryCheckProof toPkhPay toPkhStk policy assetName amount adaAmount txHash index mode uniqueId txType ttl outputCount signature) ctx = 
+treasurySpendCheck :: TreasuryCheckParams -> TreasuryCheckProof-> V2.ScriptContext -> Bool
+treasurySpendCheck (TreasuryCheckParams (GroupAdminNFTCheckTokenInfo (GroupNFTTokenInfo groupInfoCurrency groupInfoTokenName) (AdminNftTokenInfo adminNftSymbol adminNftName) (CheckTokenInfo checkTokenSymbol checkTokenName)) treasury) (TreasuryCheckProof toPkhPay toPkhStk policy assetName amount adaAmount txHash index mode uniqueId txType ttl outputCount signature) ctx = 
+  -- traceIfFalse "l" (V2.txSignedBy info  (PubKeyHash  (getGroupInfoParams groupInfo BalanceWorker))) && 
   traceIfFalse "ht" (hasUTxO ctx) && 
   traceIfFalse "hot" (amountOfCheckTokeninOwnOutput == 1) && 
   traceIfFalse "cs" checkSignature && 
@@ -184,7 +191,7 @@ treasurySpendCheck (TreasuryCheckrParams groupInfoCurrency groupInfoTokenName tr
     !groupInfo = getGroupInfo info groupInfoCurrency groupInfoTokenName
 
     amountOfCheckTokeninOwnOutput :: Integer
-    !amountOfCheckTokeninOwnOutput = getAmountOfCheckTokeninOwnOutput ctx checkTokenSymbol checkTokenName (getGroupInfoParams groupInfo StkPKh)
+    !amountOfCheckTokeninOwnOutput = getAmountOfCheckTokeninOwnOutput ctx checkTokenSymbol checkTokenName (getGroupInfoParams groupInfo StkVh)
 
     checkSignature :: Bool
     !checkSignature = 
@@ -222,7 +229,11 @@ treasurySpendCheck (TreasuryCheckrParams groupInfoCurrency groupInfoTokenName tr
 
     valuePaidToTarget :: Value
     !valuePaidToTarget 
-      | txType == 1 = valueLockedBy' info treasury (getGroupInfoParams groupInfo StkPKh)
+      | txType == 1 = valueLockedBy' info treasury (getGroupInfoParams groupInfo StkVh)
+        -- let outValues = scriptOutputsAt' treasury (getGroupInfoParams groupInfo StkVh) info
+        -- in 
+        --   if any (\v -> not $ isSingleAsset v targetSymbol targetTokenName) outValues then traceError "bo"
+        --   else mconcat outValues
       | otherwise = valuePaidTo' info (PubKeyHash toPkhPay) toPkhStk
 
 
@@ -233,6 +244,9 @@ treasurySpendCheck (TreasuryCheckrParams groupInfoCurrency groupInfoTokenName tr
       && (assetAmount > 0)
       where
         assetAmount = valueOf v cs tk
+
+    -- isSingleAsset :: Value -> CurrencySymbol -> TokenName -> Bool
+    -- isSingleAsset v cs tk = not $ any (\(cs',tk',_) -> cs' /= cs && cs' /= Ada.adaSymbol && tk' /= tk && tk' /= Ada.adaToken) $ flattenValue v
 
     isMultiAsset :: Value ->Bool
     isMultiAsset v = (length $ flattenValue v) > 2
@@ -251,9 +265,9 @@ treasurySpendCheck (TreasuryCheckrParams groupInfoCurrency groupInfoTokenName tr
     -- 1. 
     checkTx :: Bool 
     !checkTx = 
-        let !receivedValue = valuePaidToTarget 
+        let !receivedValue = valuePaidToTarget -- V2.valuePaidTo info (PubKeyHash toPkhPay)
             !inputValue = treasuryInputValue
-            !changeValues = map snd $ scriptOutputsAt' treasury (getGroupInfoParams groupInfo StkPKh) info
+            !changeValues = map snd $ scriptOutputsAt' treasury (getGroupInfoParams groupInfo StkVh) info
             !remainValue = mconcat changeValues
             !valueSum = crossValue <> remainValue
         in 
@@ -263,7 +277,7 @@ treasurySpendCheck (TreasuryCheckrParams groupInfoCurrency groupInfoTokenName tr
     checkTxInOut:: Bool
     !checkTxInOut  
       | txType == 0 = checkTx
-      | txType == 1 = ((ValidatorHash toPkhPay) == treasury ) && (toPkhStk == (getGroupInfoParams groupInfo StkPKh)) && checkTx
+      | txType == 1 = ((ValidatorHash toPkhPay) == treasury ) && (toPkhStk == (getGroupInfoParams groupInfo StkVh)) && checkTx
       | txType == 2 = (valuePaidTo' info (PubKeyHash toPkhPay) toPkhStk ) `geq` treasuryInputValue
 
     checkTtl :: Bool
@@ -273,14 +287,14 @@ treasurySpendCheck (TreasuryCheckrParams groupInfoCurrency groupInfoTokenName tr
       in ttlRange == range 
 
 {-# INLINABLE mkValidator #-}
-mkValidator :: TreasuryCheckrParams ->() -> TreasuryCheckRedeemer -> V2.ScriptContext -> Bool
+mkValidator :: TreasuryCheckParams ->() -> TreasuryCheckRedeemer -> V2.ScriptContext -> Bool
 mkValidator storeman _ redeemer ctx = 
   case redeemer of
     BurnTreasuryCheckToken -> burnTokenCheck storeman ctx
     TreasuryCheckRedeemer treasuryRedeemer -> treasurySpendCheck storeman treasuryRedeemer ctx
 
 
-typedValidator :: TreasuryCheckrParams -> PV2.TypedValidator TreasuryType
+typedValidator :: TreasuryCheckParams -> PV2.TypedValidator TreasuryType
 typedValidator = PV2.mkTypedValidatorParam @TreasuryType
     $$(PlutusTx.compile [|| mkValidator ||])
     $$(PlutusTx.compile [|| wrap ||])
@@ -288,24 +302,32 @@ typedValidator = PV2.mkTypedValidatorParam @TreasuryType
         wrap = PV2.mkUntypedValidator
 
 
-validator :: TreasuryCheckrParams -> Validator
+validator :: TreasuryCheckParams -> Validator
 validator = PV2.validatorScript . typedValidator
 
-script :: TreasuryCheckrParams -> Plutus.Script
+script :: TreasuryCheckParams -> Plutus.Script
 script = unValidatorScript . validator
 
+-- authorityCheckScriptShortBs :: TreasuryCheckParams -> SBS.ShortByteString
+-- authorityCheckScriptShortBs = SBS.toShort . LBS.toStrict $ serialise . script
 
+-- treasuryCheckScript :: CurrencySymbol -> PlutusScript PlutusScriptV2
+-- treasuryCheckScript = PlutusScriptSerialised . authorityCheckScriptShortBs
 
-treasuryCheckScript :: TreasuryCheckrParams ->  PlutusScript PlutusScriptV2
+treasuryCheckScript :: TreasuryCheckParams ->  PlutusScript PlutusScriptV2
 treasuryCheckScript p = PlutusScriptSerialised
   . SBS.toShort
   . LBS.toStrict
   $ serialise 
   (script p)
 
-treasuryCheckScriptHash :: TreasuryCheckrParams -> Plutus.ValidatorHash
+treasuryCheckScriptHash :: TreasuryCheckParams -> Plutus.ValidatorHash
 treasuryCheckScriptHash = PV2.validatorHash .typedValidator
 
+-- authorityCheckScriptHashStr :: TreasuryCheckParams -> BuiltinByteString
+-- authorityCheckScriptHashStr = case PlutusTx.fromBuiltinData $ PlutusTx.toBuiltinData . treasuryCheckScriptHash of 
+--   Just s -> s
+--   Nothing -> ""
 
-treasuryCheckAddress ::TreasuryCheckrParams -> Ledger.Address
+treasuryCheckAddress ::TreasuryCheckParams -> Ledger.Address
 treasuryCheckAddress = PV2.validatorAddress . typedValidator

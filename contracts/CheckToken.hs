@@ -9,6 +9,7 @@
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE BangPatterns #-}
 
 
 module CrossChain.CheckToken
@@ -53,8 +54,8 @@ import CrossChain.Types
 
 data CheckTokenParam
   = CheckTokenParam
-      { groupInfoNFTCurrency :: CurrencySymbol
-        , groupInfoNFTName :: TokenName
+      { groupNft :: GroupNFTTokenInfo
+        , adminNft :: AdminNftTokenInfo
         , checkTokenName :: TokenName
         , groupInfoIndex :: ParamType
       } deriving stock (Generic)
@@ -66,13 +67,21 @@ PlutusTx.makeLift ''CheckTokenParam
 
 {-# INLINABLE mkPolicy #-}
 mkPolicy :: CheckTokenParam -> () -> ScriptContext -> Bool
-mkPolicy (CheckTokenParam groupInfoNFTCurrency groupInfoNFTName checkTokenName groupInfoIndex) () ctx = 
+mkPolicy (CheckTokenParam (GroupNFTTokenInfo groupInfoNFTCurrency groupInfoNFTName) (AdminNftTokenInfo adminNftSymbol adminNftName) checkTokenName groupInfoIndex) () ctx = 
   traceIfFalse "wa" checkMint
-  && traceIfFalse "s" (V2.txSignedBy info  (PubKeyHash  (getGroupInfoParams groupInfo Admin)))
-
+  && traceIfFalse "s" hasAdminNftInInput
+  -- && traceIfFalse "eo" checkOutput
+  -- && traceIfFalse "m" checkOutputCount
   where
     info :: TxInfo
     info = scriptContextTxInfo ctx
+
+    hasAdminNftInInput :: Bool
+    !hasAdminNftInInput = 
+      let !totalInputValue = V2.valueSpent info
+          !amount = valueOf totalInputValue adminNftSymbol adminNftName
+      in amount == 1
+
 
     isGroupInfoToken :: V2.TxOut -> Bool
     isGroupInfoToken (V2.TxOut (V2.Address credential _) txOutValue _ _) = (assetClassValueOf txOutValue ( assetClass groupInfoNFTCurrency groupInfoNFTName)) > 0

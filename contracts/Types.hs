@@ -46,6 +46,13 @@ import Plutus.Script.Utils.Typed (UntypedValidator)
 import Plutus.V2.Ledger.Contexts as V2
 import Plutus.V1.Ledger.Value (valueOf,currencySymbol,tokenName,symbols,flattenValue,assetClass,assetClassValueOf)
 import Ledger.Ada  as Ada
+-- {-# INLINABLE groupInfoNFTCurrency #-}
+-- groupInfoNFTCurrency :: CurrencySymbol
+-- groupInfoNFTCurrency = groupNFTSymbol nftNonce
+
+-- {-# INLINABLE groupInfoNFTName #-}
+-- groupInfoNFTName :: TokenName
+-- groupInfoNFTName = TokenName (encodeUtf8 "GroupInfoTokenCoin")
 
 
 
@@ -100,25 +107,66 @@ data StoremanScriptContext = StoremanScriptContext {scriptContextTxInfo' :: TxIn
 --     {-# INLINABLE (==) #-}
 --     StoremanScriptContext info purpose == StoremanScriptContext info' purpose' = info == info' && purpose == purpose'
 
-data ParamType = Version | Admin | GPK | BalanceWorker | TreasuryCheckVH | OracleWorker | MintCheckVH  | StkPKh
+data ParamType = Version | Admin | GPK | BalanceWorker | TreasuryCheckVH | OracleWorker | MintCheckVH  | StkVh | StakeCheckVH
 data GroupInfoParams
   = GroupInfoParams
       { params :: [BuiltinByteString]
       } deriving (Prelude.Eq, Prelude.Show)
 
 
-data CheckTokenInfoParam
-  = CheckTokenInfoParam
+data CheckTokenInfo
+  = CheckTokenInfo
       { 
         -- groupInfoNFTCurrency :: CurrencySymbol
         -- , groupInfoNFTName :: TokenName
         checkTokenSymbol :: CurrencySymbol
         , checkTokenName :: TokenName
-      } deriving stock (Generic)
+      } deriving (Generic, Prelude.Eq)
         -- deriving anyclass (ToJSON, FromJSON)
 
-PlutusTx.makeLift ''CheckTokenInfoParam
-PlutusTx.makeIsDataIndexed ''CheckTokenInfoParam [('CheckTokenInfoParam, 0)]
+data GroupNFTTokenInfo
+  = GroupNFTTokenInfo
+      { groupNftSymbol       :: CurrencySymbol
+        , groupNftName :: TokenName
+        -- , groupInfoTokenHolder :: V2.ValidatorHash
+      } deriving  (Generic, Prelude.Eq)
+
+data AdminNftTokenInfo
+  = AdminNftTokenInfo
+    { adminNftSymbol :: CurrencySymbol
+      , adminNftName :: TokenName
+    } deriving  (Generic, Prelude.Eq)
+
+data GroupAdminNFTInfo
+  = GroupAdminNFTInfo
+      { group :: GroupNFTTokenInfo
+        , admin :: AdminNftTokenInfo
+      } deriving  (Generic, Prelude.Eq)
+        -- deriving anyclass (ToJSON, FromJSON)
+
+data GroupAdminNFTCheckTokenInfo
+  = GroupAdminNFTCheckTokenInfo
+      { groupNft :: GroupNFTTokenInfo
+        , adminNft :: AdminNftTokenInfo
+        , checkToken :: CheckTokenInfo
+      } deriving  (Generic, Prelude.Eq)
+
+PlutusTx.makeLift ''GroupAdminNFTCheckTokenInfo
+PlutusTx.makeIsDataIndexed ''GroupAdminNFTCheckTokenInfo [('GroupAdminNFTCheckTokenInfo, 0)]
+
+PlutusTx.makeLift ''AdminNftTokenInfo
+PlutusTx.makeIsDataIndexed ''AdminNftTokenInfo [('AdminNftTokenInfo, 0)]
+
+-- PlutusTx.unstableMakeIsData ''GroupAdminNFTInfo
+PlutusTx.makeLift ''GroupAdminNFTInfo
+PlutusTx.makeIsDataIndexed ''GroupAdminNFTInfo [('GroupAdminNFTInfo, 0)]
+
+-- PlutusTx.unstableMakeIsData ''GroupNFTTokenInfo
+PlutusTx.makeLift ''GroupNFTTokenInfo
+PlutusTx.makeIsDataIndexed ''GroupNFTTokenInfo [('GroupNFTTokenInfo, 0)]
+
+PlutusTx.makeLift ''CheckTokenInfo
+PlutusTx.makeIsDataIndexed ''CheckTokenInfo [('CheckTokenInfo, 0)]
 
 PlutusTx.makeLift ''TxOut'
 PlutusTx.makeIsDataIndexed ''TxOut' [('TxOut', 0)]
@@ -133,11 +181,27 @@ PlutusTx.makeLift ''StoremanScriptContext
 PlutusTx.makeIsDataIndexed ''StoremanScriptContext [('StoremanScriptContext, 0)]
 
 PlutusTx.makeLift ''ParamType
-PlutusTx.makeIsDataIndexed ''ParamType [('Version, 0),('Admin, 1),('GPK, 2),('BalanceWorker, 3),('TreasuryCheckVH, 4),('OracleWorker,5),('MintCheckVH, 6),('StkPKh, 7)]
+PlutusTx.makeIsDataIndexed ''ParamType [('Version, 0),('Admin, 1),('GPK, 2),('BalanceWorker, 3),('TreasuryCheckVH, 4),('OracleWorker,5),('MintCheckVH, 6),('StkVh, 7),('StakeCheckVH, 8)]
 
 PlutusTx.makeLift ''GroupInfoParams
 PlutusTx.makeIsDataIndexed ''GroupInfoParams [('GroupInfoParams, 0)]
 
+-- PlutusTx.makeLift ''TreasuryCheckProof
+-- PlutusTx.makeIsDataIndexed ''TreasuryCheckProof [('TreasuryCheckProof, 0)]
+
+-- PlutusTx.makeLift ''MintCheckRedeemer
+-- PlutusTx.makeIsDataIndexed ''MintCheckRedeemer [('MintCheckRedeemer, 0)]
+
+-- PlutusTx.makeLift ''CheckRedeemer
+-- PlutusTx.makeIsDataIndexed ''CheckRedeemer [('BurnCheckToken, 0),('TreasuryCheckProof, 1),('MintCheckRedeemer, 2)]
+-- PlutusTx.makeLift ''ScriptPurpose
+-- PlutusTx.makeIsDataIndexed
+--   ''ScriptPurpose
+--   [ ('Minting, 0),
+--     ('Spending, 1),
+--     ('Rewarding, 2),
+--     ('Certifying, 3)
+--   ]
 
 {-# INLINABLE getGroupInfoParams #-}
 getGroupInfoParams :: GroupInfoParams -> ParamType -> BuiltinByteString
@@ -149,7 +213,8 @@ getGroupInfoParams (GroupInfoParams params) typeId = case typeId of
     TreasuryCheckVH -> params !! 4
     OracleWorker -> params !! 5
     MintCheckVH -> params !! 6
-    StkPKh -> params !! 7
+    StkVh -> params !! 7
+    StakeCheckVH -> params !! 8
 
 {-# INLINABLE packInteger #-}
 -- | Pack an integer into a byte string with a leading

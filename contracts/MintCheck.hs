@@ -29,8 +29,8 @@ module CrossChain.MintCheck
   ,mintCheckAddress
   , MintCheckProof (..)
   , MintCheckRedeemer (..)
-  , MintCheckParams (..)
-  , MintCheckParams
+  -- , GroupAdminNFTCheckTokenInfo (..)
+  -- , GroupAdminNFTCheckTokenInfo
   ) where
 
 import Data.Aeson (FromJSON, ToJSON)
@@ -72,8 +72,13 @@ import Ledger.Typed.Scripts qualified as Scripts hiding (validatorHash)
 import Plutus.V1.Ledger.Tx
 import CrossChain.Types
 -- ===================================================
+-- import Plutus.V1.Ledger.Value
+-- import Ledger.Address (PaymentPrivateKey (PaymentPrivateKey, unPaymentPrivateKey), PaymentPubKey (PaymentPubKey),PaymentPubKeyHash (..),unPaymentPubKeyHash,toPubKeyHash,toValidatorHash)
 
-import Ledger hiding (validatorHash) 
+import Ledger hiding (validatorHash) --singleton
+
+
+
 
 data MintCheckProof = MintCheckProof
   {
@@ -82,10 +87,12 @@ data MintCheckProof = MintCheckProof
     , policy :: BuiltinByteString -- which token , zero indicated only transfer ada
     , assetName :: BuiltinByteString
     , amount :: Integer  -- token amount
+    -- , adaAmount :: Integer -- addtional ada amount
     , txHash :: BuiltinByteString
     , index :: Integer
     , mode :: Integer
     , uniqueId :: BuiltinByteString
+    -- , txType :: Integer
     , ttl :: Integer
     , signature :: BuiltinByteString
   }deriving (Prelude.Eq, Show)
@@ -104,22 +111,21 @@ instance Scripts.ValidatorTypes TreasuryType where
     type instance DatumType TreasuryType = ()
     type instance RedeemerType TreasuryType = MintCheckRedeemer
 
-data MintCheckParams
-  = MintCheckParams
-      { groupInfoCurrency :: CurrencySymbol
-        , groupInfoTokenName :: TokenName
-        , checkTokenSymbol :: CurrencySymbol
-        , checkTokenName :: TokenName
-      } deriving stock (Generic)
-        deriving anyclass (ToJSON, FromJSON)
+-- data GroupAdminNFTCheckTokenInfo
+--   = GroupAdminNFTCheckTokenInfo
+--       { groupNftInfo :: GroupNFTTokenInfo
+--         , adminNft :: AdminNftTokenInfo
+--         , checkToken:: CheckTokenInfo
+--       } deriving stock (Generic)
+--         deriving anyclass (ToJSON, FromJSON)
 
-PlutusTx.unstableMakeIsData ''MintCheckParams
-PlutusTx.makeLift ''MintCheckParams
+-- PlutusTx.unstableMakeIsData ''GroupAdminNFTCheckTokenInfo
+-- PlutusTx.makeLift ''GroupAdminNFTCheckTokenInfo
 
 {-# INLINABLE burnTokenCheck #-}
-burnTokenCheck :: MintCheckParams -> V2.ScriptContext -> Bool
-burnTokenCheck (MintCheckParams groupInfoCurrency groupInfoTokenName  checkTokenSymbol checkTokenName) ctx = 
-  traceIfFalse "a" (V2.txSignedBy info  (PubKeyHash  (getGroupInfoParams groupInfo Admin))) 
+burnTokenCheck :: GroupAdminNFTCheckTokenInfo -> V2.ScriptContext -> Bool
+burnTokenCheck (GroupAdminNFTCheckTokenInfo (GroupNFTTokenInfo groupInfoCurrency groupInfoTokenName) (AdminNftTokenInfo adminNftSymbol adminNftName) (CheckTokenInfo checkTokenSymbol checkTokenName)) ctx = 
+  traceIfFalse "a"  hasAdminNftInInput
   && traceIfFalse "b" checkOutPut
   where 
     info :: V2.TxInfo
@@ -128,18 +134,25 @@ burnTokenCheck (MintCheckParams groupInfoCurrency groupInfoTokenName  checkToken
     groupInfo :: GroupInfoParams
     !groupInfo = getGroupInfo info groupInfoCurrency groupInfoTokenName
 
+    hasAdminNftInInput :: Bool
+    !hasAdminNftInInput = 
+      let !totalInputValue = V2.valueSpent info
+          !amount = valueOf totalInputValue adminNftSymbol adminNftName
+      in amount == 1
+
     checkOutPut :: Bool
     !checkOutPut = 
       let !totalAmountOfCheckTokenInOutput = getAmountOfCheckTokenInOutput ctx checkTokenSymbol checkTokenName
-          !outputsAtChecker = map snd $ scriptOutputsAt' (ValidatorHash (getGroupInfoParams groupInfo MintCheckVH)) (getGroupInfoParams groupInfo StkPKh) info
+          !outputsAtChecker = map snd $ scriptOutputsAt' (ValidatorHash (getGroupInfoParams groupInfo MintCheckVH)) (getGroupInfoParams groupInfo StkVh) info
           !outputAtCheckerSum = valueOf (mconcat outputsAtChecker) checkTokenSymbol checkTokenName
       in totalAmountOfCheckTokenInOutput == outputAtCheckerSum && (length outputsAtChecker) == outputAtCheckerSum
 
 
 
 {-# INLINABLE mintSpendCheck #-}
-mintSpendCheck :: MintCheckParams -> MintCheckProof -> V2.ScriptContext -> Bool
-mintSpendCheck (MintCheckParams groupInfoCurrency groupInfoTokenName checkTokenSymbol checkTokenName) (MintCheckProof toPkhPay toPkhStk policy assetName amount txHash index mode uniqueId ttl signature) ctx = 
+mintSpendCheck :: GroupAdminNFTCheckTokenInfo -> MintCheckProof -> V2.ScriptContext -> Bool
+mintSpendCheck (GroupAdminNFTCheckTokenInfo (GroupNFTTokenInfo groupInfoCurrency groupInfoTokenName) (AdminNftTokenInfo adminNftSymbol adminNftName) (CheckTokenInfo checkTokenSymbol checkTokenName)) (MintCheckProof toPkhPay toPkhStk policy assetName amount txHash index mode uniqueId ttl signature) ctx = 
+  -- traceIfFalse "l" (V2.txSignedBy info  (PubKeyHash  (getGroupInfoParams groupInfo BalanceWorker))) && 
   traceIfFalse "hm" (hasUTxO ctx) && 
   traceIfFalse "hm" (amountOfCheckTokeninOwnOutput == 1) && 
   traceIfFalse "am" checkSignature &&  
@@ -174,7 +187,7 @@ mintSpendCheck (MintCheckParams groupInfoCurrency groupInfoTokenName checkTokenS
 
 
     amountOfCheckTokeninOwnOutput :: Integer
-    !amountOfCheckTokeninOwnOutput = getAmountOfCheckTokeninOwnOutput ctx checkTokenSymbol checkTokenName (getGroupInfoParams groupInfo StkPKh)
+    !amountOfCheckTokeninOwnOutput = getAmountOfCheckTokeninOwnOutput ctx checkTokenSymbol checkTokenName (getGroupInfoParams groupInfo StkVh)
 
 
     hashRedeemer :: BuiltinByteString
@@ -222,14 +235,14 @@ mintSpendCheck (MintCheckParams groupInfoCurrency groupInfoTokenName checkTokenS
 
 
 {-# INLINABLE mkValidator #-}
-mkValidator :: MintCheckParams ->() -> MintCheckRedeemer  -> V2.ScriptContext -> Bool
+mkValidator :: GroupAdminNFTCheckTokenInfo ->() -> MintCheckRedeemer  -> V2.ScriptContext -> Bool
 mkValidator storeman _ redeemer ctx = 
   case redeemer of
     BurnMintCheckToken -> burnTokenCheck storeman ctx
     MintCheckRedeemer mintCheckProof -> mintSpendCheck storeman mintCheckProof ctx
 
 
-typedValidator :: MintCheckParams -> PV2.TypedValidator TreasuryType
+typedValidator :: GroupAdminNFTCheckTokenInfo -> PV2.TypedValidator TreasuryType
 typedValidator = PV2.mkTypedValidatorParam @TreasuryType
     $$(PlutusTx.compile [|| mkValidator ||])
     $$(PlutusTx.compile [|| wrap ||])
@@ -237,27 +250,32 @@ typedValidator = PV2.mkTypedValidatorParam @TreasuryType
         wrap = PV2.mkUntypedValidator
 
 
-validator :: MintCheckParams -> Validator
+validator :: GroupAdminNFTCheckTokenInfo -> Validator
 validator = PV2.validatorScript . typedValidator
 
-script :: MintCheckParams -> Plutus.Script
+script :: GroupAdminNFTCheckTokenInfo -> Plutus.Script
 script = unValidatorScript . validator
 
+-- authorityCheckScriptShortBs :: GroupAdminNFTCheckTokenInfo -> SBS.ShortByteString
+-- authorityCheckScriptShortBs = SBS.toShort . LBS.toStrict $ serialise . script
 
-mintCheckScript :: MintCheckParams ->  PlutusScript PlutusScriptV2
+-- mintCheckScript :: CurrencySymbol -> PlutusScript PlutusScriptV2
+-- mintCheckScript = PlutusScriptSerialised . authorityCheckScriptShortBs
+
+mintCheckScript :: GroupAdminNFTCheckTokenInfo ->  PlutusScript PlutusScriptV2
 mintCheckScript p = PlutusScriptSerialised
   . SBS.toShort
   . LBS.toStrict
   $ serialise 
   (script p)
 
-mintCheckScriptHash :: MintCheckParams -> Plutus.ValidatorHash
+mintCheckScriptHash :: GroupAdminNFTCheckTokenInfo -> Plutus.ValidatorHash
 mintCheckScriptHash = PV2.validatorHash .typedValidator
 
--- authorityCheckScriptHashStr :: MintCheckParams -> BuiltinByteString
+-- authorityCheckScriptHashStr :: GroupAdminNFTCheckTokenInfo -> BuiltinByteString
 -- authorityCheckScriptHashStr = case PlutusTx.fromBuiltinData $ PlutusTx.toBuiltinData . mintCheckScriptHash of 
 --   Just s -> s
 --   Nothing -> ""
 
-mintCheckAddress ::MintCheckParams -> Ledger.Address
+mintCheckAddress ::GroupAdminNFTCheckTokenInfo -> Ledger.Address
 mintCheckAddress = PV2.validatorAddress . typedValidator
