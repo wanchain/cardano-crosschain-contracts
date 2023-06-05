@@ -23,8 +23,9 @@
 
 module CrossChain.StakeCheck
   ( stakeCheckScript
-  ,stakeCheckScriptHash
-  ,stakeCheckAddress
+  , stakeCheckScriptHash
+  , stakeCheckAddress
+  , StakeCheckRedeemer (..)
 --   , GroupAdminNFTInfo (..)
   ) where
 

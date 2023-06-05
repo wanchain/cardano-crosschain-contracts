@@ -7,20 +7,19 @@
 {-# LANGUAGE NamedFieldPuns    #-}
 {-# LANGUAGE ScopedTypeVariables  #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE DerivingStrategies #-}
-{-# LANGUAGE DeriveAnyClass     #-}
 {-# LANGUAGE BangPatterns #-}
 
 module CrossChain.AdminNFTHolder
   ( adminNFTHolderScript
   , adminNFTHolderScriptHash
   , adminNFTHolderAddress
-  , AdminDatum (..)
+  -- , AdminDatum (..)
+  , AdminActionRedeemer (..)
   ) where
 
 import Cardano.Api.Shelley (PlutusScript (..), PlutusScriptV2)
 import Prelude hiding (($), (&&),(==),(/=),(||),(-),(++),(!!),(>),(>=),(+),(/=),snd,sum ,map,elem,length,filter)
-import GHC.Generics (Generic)
+-- import GHC.Generics (Generic)
 import Codec.Serialise
 import Data.ByteString.Lazy qualified as LBS
 import Data.ByteString.Short qualified as SBS
@@ -30,7 +29,7 @@ import Ledger.Address (PaymentPrivateKey (PaymentPrivateKey, unPaymentPrivateKey
 import Plutus.V2.Ledger.Api qualified as Plutus
 import Plutus.V2.Ledger.Contexts as V2
 import Plutus.Script.Utils.V2.Typed.Scripts qualified as PV2
-import Data.Aeson (FromJSON, ToJSON)
+
 import PlutusTx qualified
 -- import PlutusTx.Builtins
 import PlutusTx.Builtins
@@ -49,11 +48,7 @@ import CrossChain.Types
 
 
 
-data AdminDatum
-  = AdminDatum
-      { signatories       :: [PubKeyHash]
-        , minNumSignatures :: Integer
-      } deriving (Prelude.Eq, Show)
+
         -- deriving anyclass (ToJSON, FromJSON)
 
 -- instance PlutusTx.Prelude.Eq AdminDatum where
@@ -62,8 +57,8 @@ data AdminDatum
 --         signatories == signatories'
 --         && minNumSignatures == minNumSignatures'
 
-PlutusTx.unstableMakeIsData ''AdminDatum
-PlutusTx.makeLift ''AdminDatum
+-- PlutusTx.unstableMakeIsData ''AdminDatum
+-- PlutusTx.makeLift ''AdminDatum
 
 data AdminActionRedeemer = Use | Update | Upgrade
     deriving (Show, Prelude.Eq)
@@ -84,8 +79,8 @@ mkValidator :: GroupAdminNFTInfo -> () -> AdminActionRedeemer -> V2.ScriptContex
 mkValidator (GroupAdminNFTInfo (GroupNFTTokenInfo groupInfoNFTSymbol groupInfoNFTName) (AdminNftTokenInfo adminNFTSymbol adminNFTName)) _ action ctx = 
     traceIfFalse "nau" isAuthorized && 
     traceIfFalse "gmi"  inputHasAdminNFT  && 
-    traceIfFalse "gmo"   checkAdminNFTOwnerInOutput  && 
-    traceIfFalse "wdat" isDatumCorrect
+    traceIfFalse "gmo"   checkAdminNFTOwnerInOutput   
+    && traceIfFalse "wdat" isDatumCorrect
   where 
     info :: V2.TxInfo
     info = V2.scriptContextTxInfo ctx
@@ -115,7 +110,7 @@ mkValidator (GroupAdminNFTInfo (GroupNFTTokenInfo groupInfoNFTSymbol groupInfoNF
             case output of
                 [o] -> o
                 _ -> traceError "mto"
-
+  
     groupInfoParams:: V2.TxOut->GroupInfoParams
     groupInfoParams (V2.TxOut _ _ txOutDatum _) =
       case txOutDatum of
@@ -135,8 +130,8 @@ mkValidator (GroupAdminNFTInfo (GroupNFTTokenInfo groupInfoNFTSymbol groupInfoNF
     adminNFTValue :: V2.TxOut -> Integer
     adminNFTValue o = assetClassValueOf (V2.txOutValue o) (assetClass adminNFTSymbol adminNFTName)
 
-    isSignedBy :: PubKeyHash -> Bool
-    isSignedBy pkh = V2.txSignedBy info pkh
+    isSignedBy :: BuiltinByteString -> Bool
+    isSignedBy pkh = V2.txSignedBy info (PubKeyHash pkh)
 
     isAuthorized :: Bool
     isAuthorized = 

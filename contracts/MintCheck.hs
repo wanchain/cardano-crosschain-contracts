@@ -154,7 +154,7 @@ mintSpendCheck :: GroupAdminNFTCheckTokenInfo -> MintCheckProof -> V2.ScriptCont
 mintSpendCheck (GroupAdminNFTCheckTokenInfo (GroupNFTTokenInfo groupInfoCurrency groupInfoTokenName) (AdminNftTokenInfo adminNftSymbol adminNftName) (CheckTokenInfo checkTokenSymbol checkTokenName)) (MintCheckProof toPkhPay toPkhStk policy assetName amount txHash index mode uniqueId ttl signature) ctx = 
   -- traceIfFalse "l" (V2.txSignedBy info  (PubKeyHash  (getGroupInfoParams groupInfo BalanceWorker))) && 
   traceIfFalse "hm" (hasUTxO ctx) && 
-  traceIfFalse "hm" (amountOfCheckTokeninOwnOutput == 1) && 
+  traceIfFalse "om" (amountOfCheckTokeninOwnOutput == 1) && 
   traceIfFalse "am" checkSignature &&  
   traceIfFalse "m" checkMint && 
   traceIfFalse "txm" checkTx &&

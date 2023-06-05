@@ -113,6 +113,12 @@ data GroupInfoParams
       { params :: [BuiltinByteString]
       } deriving (Prelude.Eq, Prelude.Show)
 
+data AdminDatum
+  = AdminDatum
+      { signatories       :: [BuiltinByteString]
+        , minNumSignatures :: Integer
+      } deriving (Prelude.Eq, Show)
+
 
 data CheckTokenInfo
   = CheckTokenInfo
@@ -185,6 +191,9 @@ PlutusTx.makeIsDataIndexed ''ParamType [('Version, 0),('Admin, 1),('GPK, 2),('Ba
 
 PlutusTx.makeLift ''GroupInfoParams
 PlutusTx.makeIsDataIndexed ''GroupInfoParams [('GroupInfoParams, 0)]
+
+PlutusTx.makeLift ''AdminDatum
+PlutusTx.makeIsDataIndexed ''AdminDatum [('AdminDatum, 0)]
 
 -- PlutusTx.makeLift ''TreasuryCheckProof
 -- PlutusTx.makeIsDataIndexed ''TreasuryCheckProof [('TreasuryCheckProof, 0)]
