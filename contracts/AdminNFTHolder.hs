@@ -75,8 +75,8 @@ adminDatumEq a b = ((signatories a) == (signatories b)) && ((minNumSignatures a)
 
 -- switch gpk & update admin TODO 
 {-# INLINABLE mkValidator #-}
-mkValidator :: GroupAdminNFTInfo -> () -> AdminActionRedeemer -> V2.ScriptContext -> Bool
-mkValidator (GroupAdminNFTInfo (GroupNFTTokenInfo groupInfoNFTSymbol groupInfoNFTName) (AdminNftTokenInfo adminNFTSymbol adminNFTName)) _ action ctx = 
+mkValidator :: AdminNftTokenInfo -> () -> AdminActionRedeemer -> V2.ScriptContext -> Bool
+mkValidator (AdminNftTokenInfo adminNFTSymbol adminNFTName) _ action ctx = 
     traceIfFalse "nau" isAuthorized && 
     traceIfFalse "gmi"  inputHasAdminNFT  && 
     traceIfFalse "gmo"   checkAdminNFTOwnerInOutput   
@@ -84,12 +84,6 @@ mkValidator (GroupAdminNFTInfo (GroupNFTTokenInfo groupInfoNFTSymbol groupInfoNF
   where 
     info :: V2.TxInfo
     info = V2.scriptContextTxInfo ctx
-
-    txInfoInputs :: [V2.TxInInfo]
-    txInfoInputs = V2.txInfoInputs info
-
-    groupInfo :: GroupInfoParams
-    !groupInfo = getGroupInfo info groupInfoNFTSymbol groupInfoNFTName
     
     ownInput :: V2.TxOut
     ownInput = case V2.findOwnInput ctx of
@@ -149,6 +143,7 @@ mkValidator (GroupAdminNFTInfo (GroupNFTTokenInfo groupInfoNFTSymbol groupInfoNF
           Update -> s == (V2.ownHash ctx)
           Use -> s == (V2.ownHash ctx)
           Upgrade -> s /= (V2.ownHash ctx) -- owner must be different with before
+      V2.TxOut{V2.txOutAddress=Address (Plutus.PubKeyCredential s) _} -> True
 
     checkNewDatum :: Bool
     checkNewDatum = 
@@ -157,14 +152,6 @@ mkValidator (GroupAdminNFTInfo (GroupNFTTokenInfo groupInfoNFTSymbol groupInfoNF
             totalCount = length $ signatories adminDatumInfo
         in (totalCount >= minCount) && (minCount > 0)
     
-    -- hasDatumInOutput :: V2.TxOut -> Bool
-    -- hasDatumInOutput V2.TxOut{V2.txOutAddress, V2.txOutDatum} = case txOutAddress of
-    --   (Address (Plutus.ScriptCredential s) _) -> case txOutDatum of
-    --     (Plutus.OutputDatum datum ) -> case Plutus.fromBuiltinData $ Plutus.getDatum datum of 
-    --       Just params -> True
-    --       _ -> False
-    --     _ -> False
-    --   _ -> True
 
     isDatumCorrect :: Bool
     isDatumCorrect = case action of
@@ -182,23 +169,23 @@ mkValidator (GroupAdminNFTInfo (GroupNFTTokenInfo groupInfoNFTSymbol groupInfoNF
       
 
 
-typedValidator :: GroupAdminNFTInfo -> PV2.TypedValidator Holding
+typedValidator :: AdminNftTokenInfo -> PV2.TypedValidator Holding
 typedValidator = PV2.mkTypedValidatorParam @Holding
     $$(PlutusTx.compile [|| mkValidator ||])
     $$(PlutusTx.compile [|| wrap ||])
     where
         wrap = PV2.mkUntypedValidator
 
-validator :: GroupAdminNFTInfo -> Validator
+validator :: AdminNftTokenInfo -> Validator
 validator = PV2.validatorScript . typedValidator
 
-script :: GroupAdminNFTInfo -> Plutus.Script
+script :: AdminNftTokenInfo -> Plutus.Script
 script = unValidatorScript . validator
 
-adminNFTHolderScriptShortBs :: GroupAdminNFTInfo -> SBS.ShortByteString
+adminNFTHolderScriptShortBs :: AdminNftTokenInfo -> SBS.ShortByteString
 adminNFTHolderScriptShortBs c = SBS.toShort . LBS.toStrict $ serialise  (script c)
 
-adminNFTHolderScript :: GroupAdminNFTInfo ->  PlutusScript PlutusScriptV2
+adminNFTHolderScript :: AdminNftTokenInfo ->  PlutusScript PlutusScriptV2
 -- adminNFTHolderScript = PlutusScriptSerialised . groupInfoTokenHolderScriptShortBs
 adminNFTHolderScript c = PlutusScriptSerialised
   . SBS.toShort
@@ -207,8 +194,8 @@ adminNFTHolderScript c = PlutusScriptSerialised
   (script c)
 
 
-adminNFTHolderAddress :: GroupAdminNFTInfo -> Ledger.Address
+adminNFTHolderAddress :: AdminNftTokenInfo -> Ledger.Address
 adminNFTHolderAddress = PV2.validatorAddress . typedValidator
 
-adminNFTHolderScriptHash :: GroupAdminNFTInfo -> ValidatorHash
+adminNFTHolderScriptHash :: AdminNftTokenInfo -> ValidatorHash
 adminNFTHolderScriptHash = PV2.validatorHash .typedValidator
