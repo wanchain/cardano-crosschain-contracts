@@ -8,6 +8,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE DeriveGeneric #-}
@@ -36,7 +37,7 @@ import Plutus.V2.Ledger.Api (TokenName (..), CurrencySymbol,TxOutRef, Value, Dat
     , TxOutRef(..)
     , OutputDatum (..),Datum (..),Address(..),ScriptHash (..)
     ,fromBuiltinData,getDatum,ValidatorHash (..),Credential (..)
-    , StakingCredential (..), PubKeyHash (..)
+    , StakingCredential (..), PubKeyHash (..),
     )
 -- import Plutus.V2.Ledger.Tx as V2
 import PlutusTx --(CompiledCode, Lift, UnsafeFromData (unsafeFromBuiltinData), applyCode, liftCode,BuiltinData,makeLift,makeIsDataIndexed)
@@ -119,6 +120,10 @@ data AdminDatum
         , minNumSignatures :: Integer
       } deriving (Prelude.Eq, Show)
 
+data NonsenseDatum
+  = NonsenseDatum
+      { dataReserve :: Integer
+      } deriving (Prelude.Eq, Show)
 
 data CheckTokenInfo
   = CheckTokenInfo
@@ -194,6 +199,9 @@ PlutusTx.makeIsDataIndexed ''GroupInfoParams [('GroupInfoParams, 0)]
 
 PlutusTx.makeLift ''AdminDatum
 PlutusTx.makeIsDataIndexed ''AdminDatum [('AdminDatum, 0)]
+
+PlutusTx.makeLift ''NonsenseDatum
+PlutusTx.makeIsDataIndexed  ''NonsenseDatum [('NonsenseDatum, 0)]
 
 -- PlutusTx.makeLift ''TreasuryCheckProof
 -- PlutusTx.makeIsDataIndexed ''TreasuryCheckProof [('TreasuryCheckProof, 0)]
@@ -284,23 +292,32 @@ getAmountOfCheckTokeninOwnOutput :: V2.ScriptContext  -> CurrencySymbol -> Token
 getAmountOfCheckTokeninOwnOutput ctx checkTokenSymbol checkTokenName stk = 
       let !lockedValue = valueLockedBy' (V2.scriptContextTxInfo ctx) (V2.ownHash ctx) stk
           !lockedAmount = valueOf lockedValue checkTokenSymbol checkTokenName
-      in lockedAmount
+      in 
+        if (isSingleAsset lockedValue checkTokenSymbol checkTokenName) then lockedAmount
+        else traceError "mkt"
       
 {-# INLINABLE getAmountOfCheckTokenInOutput #-}
 getAmountOfCheckTokenInOutput :: V2.ScriptContext  -> CurrencySymbol -> TokenName-> Integer
 getAmountOfCheckTokenInOutput ctx checkTokenSymbol checkTokenName = 
       let !outputValue = V2.valueProduced (V2.scriptContextTxInfo ctx)
           !lockedAmount = valueOf outputValue checkTokenSymbol checkTokenName
-      in 
-        if (isSingleAsset outputValue checkTokenSymbol checkTokenName) then lockedAmount
-        else traceError "mtk"
+      in lockedAmount
+        -- if (isSingleAsset outputValue checkTokenSymbol checkTokenName) then lockedAmount
+        -- else 
+        --   if lockedAmount == 0 then lockedAmount
+        --   else traceError "mkt"
+
+{-# INLINABLE getNonsenseDatum #-}
+getNonsenseDatum ::Datum -> Maybe NonsenseDatum
+getNonsenseDatum d = fromBuiltinData @NonsenseDatum $ getDatum d
 
 {-# INLINABLE scriptOutputsAt' #-}
 scriptOutputsAt' :: ValidatorHash -> BuiltinByteString -> V2.TxInfo -> [(Datum, Value)]
 scriptOutputsAt' h stk p =
     let flt V2.TxOut{V2.txOutDatum=d, V2.txOutAddress=Address (ScriptCredential s) stk', V2.txOutValue} | s == h && (stakeCredentialToBytes stk') == stk = case d of
-          OutputDatum datum -> Just (datum, txOutValue)
-          _ -> Nothing
+          OutputDatum datum -> case getNonsenseDatum datum of
+            Just nonsense -> Just (datum, txOutValue)
+            _ -> Nothing
         flt _ = Nothing
     in mapMaybe flt (V2.txInfoOutputs p)
 

@@ -148,10 +148,15 @@ burnTokenCheck (TreasuryCheckParams (GroupAdminNFTCheckTokenInfo (GroupNFTTokenI
           !outputsAtChecker = map snd $ scriptOutputsAt' (ValidatorHash (getGroupInfoParams groupInfo TreasuryCheckVH)) (getGroupInfoParams groupInfo StkVh) info
           !outputAtCheckerSum = valueOf (mconcat outputsAtChecker) checkTokenSymbol checkTokenName
       in totalAmountOfCheckTokenInOutput == outputAtCheckerSum && (length outputsAtChecker) == outputAtCheckerSum
-
+    
+    isTreasuryInput:: V2.TxInInfo -> Bool
+    isTreasuryInput (V2.TxInInfo _ (V2.TxOut (Address addressCredential _) _ _ _)) = 
+      case addressCredential of
+        (Plutus.ScriptCredential s) -> s == treasury
+        _ -> False
 
     hasTreasuryInput :: Bool
-    !hasTreasuryInput = any (\V2.TxOut{V2.txOutAddress=Address (Plutus.ScriptCredential s) _} -> s == treasury) $ map V2.txInInfoResolved $ V2.txInfoInputs info
+    !hasTreasuryInput = any (isTreasuryInput) $ V2.txInfoInputs info
 
 {-# INLINABLE treasurySpendCheck #-}
 treasurySpendCheck :: TreasuryCheckParams -> TreasuryCheckProof-> V2.ScriptContext -> Bool
